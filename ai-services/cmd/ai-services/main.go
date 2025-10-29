@@ -55,6 +55,20 @@ import "github.com/project-ai-services/ai-services/cmd/ai-services/cmd"
 	- Loop over each of the pods and call Podman delete with forced set to 'True'
 */
 
+// ai-services application create application it-desk --template-name "RAG"
+// application create workflow
+// deploy vllm
+// deploy milvus
+// deploy ui
+// deploy ....
+// deploy ingest job
+
+// ai-services application start it-desk --pod-name ingest
+// Running serices
+// deploy ingest job
+
+// ai-services application images ls --template-name "RAG"
+
 func main() {
 	cmd.Execute()
 }

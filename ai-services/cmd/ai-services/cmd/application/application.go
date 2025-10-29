@@ -2,6 +2,8 @@ package application
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/project-ai-services/ai-services/cmd/ai-services/cmd/application/image"
 )
 
 // ApplicationCmd represents the application command
@@ -16,4 +18,5 @@ func init() {
 	ApplicationCmd.AddCommand(createCmd)
 	ApplicationCmd.AddCommand(psCmd)
 	ApplicationCmd.AddCommand(deleteCmd)
+	ApplicationCmd.AddCommand(image.ImageCmd)
 }

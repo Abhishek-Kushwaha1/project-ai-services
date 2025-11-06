@@ -45,18 +45,16 @@ def get_prompts():
             table_summary = data.get("table_summary")
             query_vllm = data.get("query_vllm")
             query_vllm_stream = data.get("query_vllm_stream")
-            gen_qa_pairs = data.get("gen_qa_pairs")
 
             if any(prompt in (None, "") for prompt in (
                     llm_classify,
                     table_summary,
                     query_vllm,
                     query_vllm_stream,
-                    gen_qa_pairs,
             )):
                 raise ValueError(f"One or more prompt variables are missing or empty in '{prompt_path}' file.")
 
-            return llm_classify, table_summary, query_vllm, query_vllm_stream, gen_qa_pairs
+            return llm_classify, table_summary, query_vllm, query_vllm_stream
     except FileNotFoundError:
         raise FileNotFoundError(f"JSON file not found at: {prompt_path}")
     except json.JSONDecodeError as e:

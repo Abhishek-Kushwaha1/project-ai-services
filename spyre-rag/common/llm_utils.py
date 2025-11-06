@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from common.misc_utils import get_prompts
 
-llm_classify, table_summary, query_vllm_pmt, query_vllm_stream_pmt, gen_qa_pairs_pmt = get_prompts()
+llm_classify, table_summary, query_vllm_pmt, query_vllm_stream_pmt = get_prompts()
 
 
 def classify_text_with_llm(text_blocks, gen_model, llm_endpoint, batch_size=128):
@@ -183,52 +183,6 @@ def query_vllm_stream(question, documents, llm_endpoint, ckpt, stop_words, max_n
         return {"error": str(e) + "\n" + e.response.text}, 0.
     except Exception as e:
         return {"error": str(e)}, 0.
-
-
-def generate_qa_pairs(records, gen_model, gen_endpoint, batch_size=32):
-    all_prompts = []
-    for r in records:
-        prompt = gen_qa_pairs_pmt.format(text=r.get("page_content"))
-        all_prompts.append(prompt)
-
-    qa_pairs = []
-
-    for i in tqdm(range(0, len(all_prompts), batch_size), desc="Generating QA Pairs"):
-        batch_prompts = all_prompts[i:i+batch_size]
-
-        payload = {
-            "model": gen_model,
-            "prompt": batch_prompts,
-            "temperature": 0.0,
-            "max_tokens": 512
-        }
-
-        try:
-            response = requests.post(f"{gen_endpoint}/v1/completions", json=payload)
-            response.raise_for_status()
-            result = response.json()
-            choices = result.get("choices", [])
-
-            for j, choice in enumerate(choices):
-                text = choice.get("text", "").strip()
-                if "Q:" in batch_prompts[j]:
-                    # Try to split into question and answer
-                    parts = text.split("A:", 1)
-                    question = parts[0].strip().lstrip("Q:").strip()
-                    answer = parts[1].strip() if len(parts) > 1 else ""
-                    qa_pairs.append({
-                        "question": question,
-                        "answer": answer,
-                        "context": records[i + j].get("page_content", ""),
-                        "chunk_id": records[i + j].get("chunk_id", "")
-                    })
-
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Error generating QA batch: {e}, {e.response.text}")
-        except Exception as e:
-            print(f"❌ Error generating QA batch: {e}")
-
-    return qa_pairs
 
 def tokenize_with_llm(prompt, llm_endpoint):
     payload = {

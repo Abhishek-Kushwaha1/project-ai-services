@@ -12,13 +12,12 @@ import {
 import "./App.scss"
 import HeaderNav from "./Header.jsx"
 import { Theme, Content, Grid, Column } from "@carbon/react";
-import { customSendMessage } from "./customSendMessage_2.jsx";
+import { customSendMessage } from "./customSendMessage.jsx";
 import { renderUserDefinedResponse } from "./renderUserDefinedResponse.js";
 
 const config = {
   messaging: {
     customSendMessage,
-    // customLoadHistory
   },
   headerConfig: {
     hideMinimizeButton: true,
@@ -28,7 +27,6 @@ const config = {
     corners: CornersType.SQUARE,
   },
   layout: {
-    // showFrame: false,
     hasContentMaxWidth: false,
   },
   openChatByDefault: true,
@@ -43,11 +41,7 @@ function App() {
       source: 'https://isv-graphics.s3.us-south.cloud-object-storage.appdomain.cloud/PAC-background-new.jpg',
       corners: 'round',
     });
-    instance.updateMainHeaderTitle('FarmerAI');
-
-    // instance.updateCSSVariables({
-    //   '--cds-chat-shell-background:': '#0f62fe',
-    // });
+    instance.updateMainHeaderTitle('DocuAssist');
 
     instance.on({ type: BusEventType.FEEDBACK, handler: feedbackHandler });
     setChatInstance(instance);
@@ -57,8 +51,7 @@ function App() {
         generic: [
           {
             response_type: "text",
-            text: `Hi, I'm your assistant! You can ask me anything related to your crop, pesticide, fertilizer, etc.
-    नमस्ते, मैं आपका सहायक हूँ! आप मुझसे अपनी फसल, कीटनाशक, उर्वरक आदि से संबंधित कोई भी प्रश्न पूछ सकते हैं।`,
+            text: `Hi, I'm your assistant! You can ask me anything related to your documents`,
           },
         ],
       },
@@ -103,5 +96,3 @@ function App() {
 }
 
 export default App;
-// const root = createRoot(document.querySelector("#root"));
-// root.render(<App />);

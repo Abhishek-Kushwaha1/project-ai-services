@@ -1,13 +1,6 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
-const path = require('path');
-
-// import express from 'express';
-// import axios from 'axios';
-// import cors from 'cors';
-// import path from 'path';
-// import { fileURLToPath } from 'url';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -67,7 +60,6 @@ app.post('/stream', async (req, res) => {
       res.end();
     });
 
-    // res.json(response.data);
   } catch (error) {
     console.error('OpenAI API Error:', error.message);
     res.status(500).json({ error: 'Failed to fetch response from model API' });

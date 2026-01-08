@@ -11,6 +11,7 @@ import (
 	"github.com/project-ai-services/ai-services/tests/e2e/cleanup"
 	"github.com/project-ai-services/ai-services/tests/e2e/cli"
 	"github.com/project-ai-services/ai-services/tests/e2e/config"
+	"github.com/project-ai-services/ai-services/tests/e2e/podman"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -199,7 +200,9 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			if !podmanReady {
 				Skip("Podman not available - will be installed via bootstrap configure")
 			}
-			Skip("Podman container validation not implemented yet")
+			err := podman.VerifyContainers(appName)
+			Expect(err).NotTo(HaveOccurred(), "verify containers failed")
+			fmt.Println("[TEST] Containers verified")
 		})
 	})
 })

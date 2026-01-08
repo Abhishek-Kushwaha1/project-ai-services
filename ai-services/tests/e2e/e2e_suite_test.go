@@ -134,7 +134,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(cli.ValidateBootstrapFullOutput(output)).To(Succeed())
 		})
 	})
-	Context("Application Lifecycle", func() {
+	Context("Application Creation", func() {
 		It("creates rag application, runs health checks and validates RAG endpoints", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 			defer cancel()
@@ -159,6 +159,9 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			fmt.Printf("[TEST] Application %s created, healthy, and RAG endpoints validated\n", appName)
 		})
+	
+	})
+	Context("Application Observability", func() {
 		It("verifies application ps output", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
@@ -169,6 +172,16 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(cli.ValidateApplicationPS(psOutput)).To(Succeed())
 			fmt.Printf("[TEST] application ps output validated successfully for %s\n", appName)
 		})
+		It("verifies pods status and restart count", func() {
+			if !podmanReady {
+				Skip("Podman not available - will be installed via bootstrap configure")
+			}
+			err := podman.VerifyContainers(appName)
+			Expect(err).NotTo(HaveOccurred(), "verify containers failed")
+			fmt.Println("[TEST] Containers verified")
+		})
+	})
+	Context("Application Teardown", func() {
 		It("stops the application", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
@@ -190,19 +203,10 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			fmt.Printf("[TEST] Application %s deleted successfully\n", appName)
 		})
 	})
-	XContext("RAG validation", func() {
+	Context("RAG / Golden Dataset Validation", func() {
 		It("validates responses against golden dataset", func() {
 			Skip("RAG validation not implemented yet")
 		})
 	})
-	XContext("Podman / Container Validation", func() {
-		It("verifies application containers are healthy", func() {
-			if !podmanReady {
-				Skip("Podman not available - will be installed via bootstrap configure")
-			}
-			err := podman.VerifyContainers(appName)
-			Expect(err).NotTo(HaveOccurred(), "verify containers failed")
-			fmt.Println("[TEST] Containers verified")
-		})
-	})
+
 })

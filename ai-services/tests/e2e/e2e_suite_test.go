@@ -193,6 +193,14 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			fmt.Printf("[TEST] Images pulled successfully for %s template\n", templateName)
 		})
+		It("verifies application model list command", func() {
+            ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+            defer cancel()
+            output, err := cli.ModelList(ctx, cfg, templateName)
+            Expect(err).NotTo(HaveOccurred())
+            Expect(cli.ValidateModelListOutput(output, templateName)).To(Succeed())
+            fmt.Printf("[TEST] Application model list validated successfully!\n")
+        })
 
 	})
 	Context("Application Observability", func() {

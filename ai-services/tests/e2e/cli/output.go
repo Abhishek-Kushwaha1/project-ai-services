@@ -144,6 +144,42 @@ func ValidateImageListOutput(output string) error {
 	return nil
 }
 
+func ValidateModelListOutput(output string, templateName string) error {
+	header := fmt.Sprintf("Models in application template %s:", templateName)
+	if !strings.Contains(output, header) {
+		return fmt.Errorf("model list validation failed: missing header '%s'", header)
+	}
+
+	// Expect at least one model line starting with '- '
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	found := false
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, "- ") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("model list validation failed: no model entries found")
+	}
+	// If this is the rag template, ensure specific models are present
+	if templateName == "rag" {
+		expected := []string{
+			"BAAI/bge-reranker-v2-m3",
+			"ibm-granite/granite-embedding-278m-multilingual",
+			"ibm-granite/granite-3.3-8b-instruct",
+		}
+		for _, e := range expected {
+			if !strings.Contains(output, e) {
+				return fmt.Errorf("model list validation failed: expected model '%s' not found in output", e)
+			}
+		}
+	}
+
+	return nil
+}
+
 func ValidatePullImageOutput(output, templateName string) error {
 	required := []string{
 		"Downloading the images for the application",

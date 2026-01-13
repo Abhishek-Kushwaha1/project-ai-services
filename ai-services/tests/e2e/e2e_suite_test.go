@@ -28,6 +28,7 @@ var (
 	ctx          context.Context
 	podmanReady  bool
 	templateName string
+	mainPodsByTemplate map[string][]string
 )
 
 func TestE2E(t *testing.T) {
@@ -48,6 +49,15 @@ var _ = BeforeSuite(func() {
 
 	By("Setting template name")
 	templateName = "rag"
+
+	By("Setting main pods by template")
+	mainPodsByTemplate = map[string][]string{
+	"rag": {
+		"vllm-server",
+		"milvus",
+		"chat-bot",
+	},
+}
 
 	By("Preparing runtime environment")
 	tempDir = bootstrap.PrepareRuntime(runID)
@@ -162,14 +172,14 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 			defer cancel()
 
-			appName = fmt.Sprintf("rag-app-%s", runID)
+			appName = fmt.Sprintf("%s-app-%s", templateName, runID)
 			pods := []string{"backend", "ui", "db"} // replace with actual pod names
 
 			err := cli.CreateAppWithHealthAndRAG(
 				ctx,
 				cfg,
 				appName,
-				"rag",
+				templateName,
 				"ui.port=3000,backend.port=5000",
 				"5000", // backend port
 				"3000", //ui port
@@ -245,13 +255,15 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
 
-			pods := []string{
-				fmt.Sprintf("%s--vllm-server", appName),
-				fmt.Sprintf("%s--milvus", appName),
-				fmt.Sprintf("%s--chat-bot", appName),
+			suffixes, ok := mainPodsByTemplate[templateName]
+			Expect(ok).To(BeTrue(), "unknown templateName")
+
+			pods := make([]string, 0, len(suffixes))
+			for _, s := range suffixes {
+				pods = append(pods, fmt.Sprintf("%s--%s", appName, s))
 			}
 
-			output, err := cli.StopAppWithPods(ctx, cfg, appName, templateName, pods)
+			output, err := cli.StopAppWithPods(ctx, cfg, appName, pods)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).NotTo(BeEmpty())
 

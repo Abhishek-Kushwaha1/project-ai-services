@@ -219,7 +219,6 @@ func ApplicationPS(ctx context.Context, cfg *config.Config, appName string) (str
 	cmd := exec.CommandContext(ctx, cfg.AIServiceBin, args...)
 	out, err := cmd.CombinedOutput()
 	output := string(out)
-	fmt.Println(output)
 
 	if err != nil {
 		return output, fmt.Errorf("application ps failed: %w\n%s", err, output)
@@ -297,7 +296,12 @@ func PullImage(ctx context.Context, cfg *config.Config, templateName string) err
 }
 
 // StopAppWithPods stops an application specifying pods to stop.
-func StopAppWithPods(ctx context.Context, cfg *config.Config, appName string, templateName string, pods []string) (string, error) {
+func StopAppWithPods(
+	ctx context.Context,
+	cfg *config.Config,
+	appName string,
+	pods []string,
+) (string, error) {
 	podArg := strings.Join(pods, ",")
 	args := []string{
 		"application", "stop", appName,
@@ -307,9 +311,9 @@ func StopAppWithPods(ctx context.Context, cfg *config.Config, appName string, te
 
 	fmt.Printf("[CLI] Running: %s %s\n", cfg.AIServiceBin, strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, cfg.AIServiceBin, args...)
+
 	out, err := cmd.CombinedOutput()
 	output := string(out)
-
 	if err != nil {
 		return output, fmt.Errorf("application stop --pod failed: %w\n%s", err, output)
 	}
@@ -323,7 +327,7 @@ func StopAppWithPods(ctx context.Context, cfg *config.Config, appName string, te
 		return output, err
 	}
 
-	if err := ValidatePodsExitedAfterStop(psOutput, appName, templateName); err != nil {
+	if err := ValidatePodsExitedAfterStop(psOutput, appName, pods); err != nil {
 		return output, err
 	}
 

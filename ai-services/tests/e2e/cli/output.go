@@ -116,26 +116,52 @@ func ValidateHelpRandomCommandOutput(command string, output string) error {
 }
 
 func ValidateApplicationPS(output string) error {
-	if strings.Contains(output, "No Pods found") {
+	if isNoPods(output) {
 		return nil
 	}
 
-	if strings.Contains(output, "APPLICATION NAME") &&
-		strings.Contains(output, "POD NAME") &&
-		strings.Contains(output, "STATUS") {
+	if isMinimalPSFormat(output) {
 		return nil
 	}
 
-	if strings.Contains(output, "APPLICATION NAME") &&
-		strings.Contains(output, "POD ID") &&
-		strings.Contains(output, "POD NAME") &&
-		strings.Contains(output, "STATUS") &&
-		strings.Contains(output, "CREATED") &&
-		strings.Contains(output, "CONTAINERS") {
+	if isExtendedPSFormat(output) {
 		return nil
 	}
 
-	return fmt.Errorf("invalid application ps output format")
+	return fmt.Errorf("invalid application ps output format:\n%s", output)
+}
+
+func isNoPods(output string) bool {
+	return strings.Contains(output, "No Pods found")
+}
+
+func isMinimalPSFormat(output string) bool {
+	return containsAll(output,
+		"APPLICATION NAME",
+		"POD NAME",
+		"STATUS",
+	)
+}
+
+func isExtendedPSFormat(output string) bool {
+	return containsAll(output,
+		"APPLICATION NAME",
+		"POD ID",
+		"POD NAME",
+		"STATUS",
+		"CREATED",
+		"CONTAINERS",
+	)
+}
+
+func containsAll(output string, fields ...string) bool {
+	for _, field := range fields {
+		if !strings.Contains(output, field) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func ValidateImageListOutput(output string) error {
@@ -212,24 +238,11 @@ func ValidateStopAppOutput(output string) error {
 func ValidatePodsExitedAfterStop(
 	psOutput string,
 	appName string,
-	templateName string,
+	mainPods []string,
 ) error {
-	mainPodsByType := map[string][]string{
-		"rag": {
-			"vllm-server",
-			"milvus",
-			"chat-bot",
-		},
-	}
-
-	mainPods, ok := mainPodsByType[templateName]
-	if !ok {
-		return fmt.Errorf("unknown application type: %s", templateName)
-	}
-
 	isMainPod := func(pod string) bool {
-		for _, m := range mainPods {
-			if strings.Contains(pod, m) {
+		for _, p := range mainPods {
+			if pod == p {
 				return true
 			}
 		}
@@ -252,15 +265,14 @@ func ValidatePodsExitedAfterStop(
 
 		if isMainPod(podName) && status != "Exited" {
 			return fmt.Errorf(
-				"main pod %s not in Exited state for app %s (type: %s)",
+				"main pod %s not in Exited state for app %s",
 				podName,
 				appName,
-				templateName,
 			)
 		}
 	}
 
-	fmt.Printf("[TEST] Main pods for %s are in Exited state\n", templateName)
+	fmt.Println("[TEST] Main pods are in Exited state")
 
 	return nil
 }
@@ -289,7 +301,6 @@ func ValidateNoPodsAfterDelete(psOutput string) error {
 
 		return fmt.Errorf("pods still exist after delete")
 	}
-
 	fmt.Println("[TEST] No pods present after delete")
 
 	return nil

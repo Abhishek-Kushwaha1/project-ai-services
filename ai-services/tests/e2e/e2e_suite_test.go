@@ -27,7 +27,10 @@ var (
 	binVersion   string
 	ctx          context.Context
 	podmanReady  bool
+<<<<<<< HEAD
 	templateName string
+=======
+>>>>>>> cae6cc3c5cf6a3155e25de05f0592b28a8f8bdb9
 )
 
 func TestE2E(t *testing.T) {
@@ -46,9 +49,12 @@ var _ = BeforeSuite(func() {
 	By("Generating unique run ID")
 	runID = fmt.Sprintf("%d", time.Now().Unix())
 
+<<<<<<< HEAD
 	By("Setting template name")
 	templateName = "rag"
 
+=======
+>>>>>>> cae6cc3c5cf6a3155e25de05f0592b28a8f8bdb9
 	By("Preparing runtime environment")
 	tempDir = bootstrap.PrepareRuntime(runID)
 	Expect(tempDir).NotTo(BeEmpty())
@@ -93,7 +99,9 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	fmt.Println("[TEARDOWN] AI Services E2E teardown")
 	By("Cleaning up E2E environment")
-	cleanup.CleanupTemp(tempDir)
+	if err := cleanup.CleanupTemp(tempDir); err != nil {
+		fmt.Printf("[TEARDOWN] cleanup failed: %v\n", err)
+	}
 	By("Cleanup completed")
 })
 
@@ -154,19 +162,19 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(cli.ValidateBootstrapFullOutput(output)).To(Succeed())
 		})
 	})
-	Context("Application Creation", func() {
+	Context("Application Lifecycle", func() {
 		It("creates rag application, runs health checks and validates RAG endpoints", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 			defer cancel()
 
-			appName = fmt.Sprintf("%s-app-%s", templateName, runID)
+			appName = fmt.Sprintf("rag-app-%s", runID)
 			pods := []string{"backend", "ui", "db"} // replace with actual pod names
 
 			err := cli.CreateAppWithHealthAndRAG(
 				ctx,
 				cfg,
 				appName,
-				templateName,
+				"rag",
 				"ui.port=3000,backend.port=5000",
 				"5000", // backend port
 				"3000", //ui port

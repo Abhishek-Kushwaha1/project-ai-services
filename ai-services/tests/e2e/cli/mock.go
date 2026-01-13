@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// RunCommand simulates ai-services CLI commands for placeholder E2E tests
+// RunCommand simulates ai-services CLI commands for placeholder E2E tests.
 func RunCommand(args ...string) (string, error) {
 	if len(args) == 0 {
 		return "", fmt.Errorf("no command provided")

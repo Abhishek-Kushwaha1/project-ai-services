@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 	"reflect"
-	"strings"
 	"regexp"
+	"strings"
 )
 
 func ValidateBootstrapConfigureOutput(output string) error {
@@ -268,7 +268,6 @@ func ValidateDeleteAppOutput(output, appName string) error {
 func ValidateNoPodsAfterDelete(psOutput string) error {
 	for line := range strings.SplitSeq(psOutput, "\n") {
 		line = strings.TrimSpace(line)
-
 		if line == "" ||
 			strings.HasPrefix(line, "APPLICATION") ||
 			strings.HasPrefix(line, "──") ||

@@ -27,10 +27,7 @@ var (
 	binVersion   string
 	ctx          context.Context
 	podmanReady  bool
-<<<<<<< HEAD
 	templateName string
-=======
->>>>>>> cae6cc3c5cf6a3155e25de05f0592b28a8f8bdb9
 )
 
 func TestE2E(t *testing.T) {
@@ -49,12 +46,9 @@ var _ = BeforeSuite(func() {
 	By("Generating unique run ID")
 	runID = fmt.Sprintf("%d", time.Now().Unix())
 
-<<<<<<< HEAD
 	By("Setting template name")
 	templateName = "rag"
 
-=======
->>>>>>> cae6cc3c5cf6a3155e25de05f0592b28a8f8bdb9
 	By("Preparing runtime environment")
 	tempDir = bootstrap.PrepareRuntime(runID)
 	Expect(tempDir).NotTo(BeEmpty())
@@ -202,13 +196,13 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			fmt.Printf("[TEST] Images pulled successfully for %s template\n", templateName)
 		})
 		It("verifies application model list command", func() {
-            ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-            defer cancel()
-            output, err := cli.ModelList(ctx, cfg, templateName)
-            Expect(err).NotTo(HaveOccurred())
-            Expect(cli.ValidateModelListOutput(output, templateName)).To(Succeed())
-            fmt.Printf("[TEST] Application model list validated successfully!\n")
-        })
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+			defer cancel()
+			output, err := cli.ModelList(ctx, cfg, templateName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cli.ValidateModelListOutput(output, templateName)).To(Succeed())
+			fmt.Printf("[TEST] Application model list validated successfully!\n")
+		})
 
 	})
 	Context("Application Observability", func() {

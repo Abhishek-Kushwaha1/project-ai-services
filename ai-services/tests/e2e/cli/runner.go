@@ -264,20 +264,6 @@ func ListImage(ctx context.Context, cfg *config.Config, templateName string) err
 	return nil
 }
 
-// ModelList lists models for a given application template.
-func ModelList(ctx context.Context, cfg *config.Config, templateName string) (string, error) {
-	args := []string{"application", "model", "list", "--template", templateName}
-	fmt.Printf("[CLI] Running: %s %s\n", cfg.AIServiceBin, strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, cfg.AIServiceBin, args...)
-	out, err := cmd.CombinedOutput()
-	output := string(out)
-	if err != nil {
-		return output, fmt.Errorf("application model list failed: %w\n%s", err, output)
-	}
-
-	return output, nil
-}
-
 // PullImage from the given application template.
 func PullImage(ctx context.Context, cfg *config.Config, templateName string) error {
 	args := []string{"application", "image", "pull", "--template", templateName}
@@ -387,6 +373,34 @@ func ApplicationInfo(
 
 	if err != nil {
 		return output, fmt.Errorf("application info failed: %w\n%s", err, output)
+	}
+
+	return output, nil
+}
+
+// ModelList lists models for a given application template.
+func ModelList(ctx context.Context, cfg *config.Config, templateName string) (string, error) {
+	args := []string{"application", "model", "list", "--template", templateName}
+	fmt.Printf("[CLI] Running: %s %s\n", cfg.AIServiceBin, strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, cfg.AIServiceBin, args...)
+	out, err := cmd.CombinedOutput()
+	output := string(out)
+	if err != nil {
+		return output, fmt.Errorf("application model list failed: %w\n%s", err, output)
+	}
+
+	return output, nil
+}
+
+// ModelDownload downloads a model for a given application template.
+func ModelDownload(ctx context.Context, cfg *config.Config, templateName string) (string, error) {
+	args := []string{"application", "model", "download", "--template", templateName}
+	fmt.Printf("[CLI] Running: %s %s\n", cfg.AIServiceBin, strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, cfg.AIServiceBin, args...)
+	out, err := cmd.CombinedOutput()
+	output := string(out)
+	if err != nil {
+		return output, fmt.Errorf("application model download failed: %w\n%s", err, output)
 	}
 
 	return output, nil

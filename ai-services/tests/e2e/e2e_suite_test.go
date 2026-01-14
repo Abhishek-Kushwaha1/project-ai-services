@@ -150,6 +150,24 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(cli.ValidateApplicationsTemplateCommandOutput(output)).To(Succeed())
 		})
 	})
+	Context("Application Model Command Tests", func() {
+		It("verifies application model list command", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+			defer cancel()
+			output, err := cli.ModelList(ctx, cfg, templateName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cli.ValidateModelListOutput(output, templateName)).To(Succeed())
+			fmt.Printf("[TEST] Application model list validated successfully!\n")
+		})
+		It("verifies application model info command", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+			defer cancel()
+			output, err := cli.ModelDownload(ctx, cfg, templateName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cli.ValidateModelDownloadOutput(output, templateName)).To(Succeed())
+			fmt.Printf("[TEST] Application model download validated successfully!\n")
+		})
+	})
 	Context("Bootstrap Steps", func() {
 		It("runs bootstrap configure", func() {
 			output, err := cli.BootstrapConfigure(ctx)
@@ -206,15 +224,6 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			fmt.Printf("[TEST] Images pulled successfully for %s template\n", templateName)
 		})
-		It("verifies application model list command", func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-			defer cancel()
-			output, err := cli.ModelList(ctx, cfg, templateName)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cli.ValidateModelListOutput(output, templateName)).To(Succeed())
-			fmt.Printf("[TEST] Application model list validated successfully!\n")
-		})
-
 	})
 	Context("Application Observability", func() {
 		It("verifies application ps output", func() {

@@ -252,13 +252,22 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(cli.ValidateApplicationInfo(infoOutput, appName, templateName)).To(Succeed())
 			fmt.Printf("[TEST] Application info output validated successfully!\n")
 		})
-		It("verifies pods status and restart count", func() {
+		It("Verifies pods existance, health status  and restart count", func() {
 			if !podmanReady {
 				Skip("Podman not available - will be installed via bootstrap configure")
 			}
 			err := podman.VerifyContainers(appName)
 			Expect(err).NotTo(HaveOccurred(), "verify containers failed")
 			fmt.Println("[TEST] Containers verified")
+		})
+		It("Verifies Exposed Ports of the application", func() {
+			if !podmanReady {
+				Skip("Podman not available - will be installed via bootstrap configure")
+			}
+			expected := []int{3000,5000} // UI and backend ports
+			err := podman.VerifyExposedPorts(appName, expected)
+			Expect(err).NotTo(HaveOccurred(), "ports verification failed")
+			fmt.Printf("[TEST] Pod Exposed Ports verified")
 		})
 	})
 	Context("Application Teardown", func() {

@@ -445,6 +445,7 @@ func ValidatePodsRunningAfterStart(psOutput, appName string) error {
 				return true
 			}
 		}
+
 		return false
 	}
 
@@ -471,6 +472,7 @@ func ValidatePodsRunningAfterStart(psOutput, appName string) error {
 	}
 
 	fmt.Println("[TEST] Main pods are running after start")
+
 	return nil
 }
 
@@ -479,5 +481,6 @@ func ValidateStartAppOutput(output string) error {
 		!strings.Contains(output, "started successfully") {
 		return fmt.Errorf("start app validation failed")
 	}
+
 	return nil
 }

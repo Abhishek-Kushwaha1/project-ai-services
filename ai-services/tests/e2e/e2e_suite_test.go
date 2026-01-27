@@ -252,7 +252,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(cli.ValidateApplicationInfo(infoOutput, appName, templateName)).To(Succeed())
 			fmt.Printf("[TEST] Application info output validated successfully!\n")
 		})
-		It("Verifies pods existance, health status  and restart count", func() {
+		It("Verifies pods existence, health status  and restart count", func() {
 			if !podmanReady {
 				Skip("Podman not available - will be installed via bootstrap configure")
 			}

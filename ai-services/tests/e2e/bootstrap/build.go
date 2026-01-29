@@ -12,7 +12,7 @@ import (
 
 const execPerm = 0o755
 
-var testBinDir string // Package-level var to store the temp bin directory.
+var testBinDir string
 
 // SetTestBinDir sets the temporary directory for test binaries.
 func SetTestBinDir(dir string) {

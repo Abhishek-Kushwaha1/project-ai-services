@@ -228,7 +228,7 @@ func copyBinaryToTemp(srcBinPath, tempBinDir string) (string, error) {
 	}
 
 	if err := os.Chmod(destBinPath, execPerm); err != nil {
-		return "", fmt.Errorf("failed to chmod binary: %w", err)
+		return "", fmt.Errorf("failed to execute binary: %w", err)
 	}
 
 	return destBinPath, nil

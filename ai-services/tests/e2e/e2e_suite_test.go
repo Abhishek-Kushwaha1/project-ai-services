@@ -62,7 +62,7 @@ var _ = BeforeSuite(func() {
 	cfg.AIServiceBin = aiServiceBin
 
 	By("Getting ai-services version")
-	binVersion, err = bootstrap.GetBinaryVersion(aiServiceBin)
+	binVersion, err = bootstrap.CheckBinaryVersion(aiServiceBin)
 	Expect(err).NotTo(HaveOccurred())
 	fmt.Printf("[SETUP] ai-services version: %s\n", binVersion)
 
@@ -145,17 +145,17 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			appName = fmt.Sprintf("rag-app-%s", runID)
 			pods := []string{"backend", "ui", "db"} // replace with actual pod names
 
-			err := cli.CreateAppWithHealthAndRAG(
+			err := cli.CreateRAGAppAndValidate(
 				ctx,
 				cfg,
 				appName,
 				"rag",
-				"ui.port=3000,backend.port=5000",
-				"5000", // backend port
-				"3000", //ui port
+				"ui.port=3100,backend.port=5100",
+				"5100", // backend port
+				"3100", //ui port
 				cli.CreateOptions{
-					SkipImageDownload: false,
 					SkipModelDownload: false,
+					ImagePullPolicy:   "IfNotPresent",
 				},
 				pods,
 			)

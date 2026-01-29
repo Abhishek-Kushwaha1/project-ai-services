@@ -1,8 +1,8 @@
 package ingestion
 
-import "log"
+import "github.com/project-ai-services/ai-services/internal/pkg/logger"
 
 // WaitForIngestion waits until ingestion completes.
 func WaitForIngestion(app string) {
-	log.Println("[Ingestion] Placeholder for waiting ingestion completion for app:", app)
+	logger.Infof("[Ingestion] Placeholder for waiting ingestion completion for app: %s\n", app)
 }

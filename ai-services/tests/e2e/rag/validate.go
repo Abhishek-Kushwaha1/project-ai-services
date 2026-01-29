@@ -1,8 +1,8 @@
 package rag
 
-import "log"
+import "github.com/project-ai-services/ai-services/internal/pkg/logger"
 
 // ValidateRAGResponse validates chat response against golden dataset.
 func ValidateRAGResponse(prompt, expected string) {
-	log.Println("[RAG] Placeholder for validating prompt:", prompt)
+	logger.Infof("[RAG] Placeholder for validating prompt:", prompt)
 }

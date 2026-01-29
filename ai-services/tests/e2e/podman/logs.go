@@ -1,8 +1,8 @@
 package podman
 
-import "log"
+import "github.com/project-ai-services/ai-services/internal/pkg/logger"
 
 // GetPodLogs retrieves logs from a container.
 func GetPodLogs(containerName string) {
-	log.Println("[Podman] Placeholder for fetching logs:", containerName)
+	logger.Infoln("[Podman] Placeholder for fetching logs: " + containerName)
 }

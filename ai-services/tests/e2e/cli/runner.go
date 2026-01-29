@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os/exec"
 	"regexp"
@@ -12,7 +13,6 @@ import (
 	"github.com/project-ai-services/ai-services/tests/e2e/bootstrap"
 	"github.com/project-ai-services/ai-services/tests/e2e/common"
 	"github.com/project-ai-services/ai-services/tests/e2e/config"
-	"github.com/project-ai-services/ai-services/tests/e2e/httpclient"
 )
 
 type CreateOptions struct {
@@ -20,6 +20,7 @@ type CreateOptions struct {
 	SkipModelDownload bool
 	SkipValidation    string
 	Verbose           bool
+	ImagePullPolicy   string
 }
 
 // Bootstrap runs the full bootstrap (configure + validate).
@@ -83,14 +84,14 @@ func CreateApp(
 	if params != "" {
 		args = append(args, "--params", params)
 	}
-	if opts.SkipImageDownload {
-		args = append(args, "--skip-image-download")
-	}
 	if opts.SkipModelDownload {
 		args = append(args, "--skip-model-download")
 	}
 	if opts.SkipValidation != "" {
 		args = append(args, "--skip-validation", opts.SkipValidation)
+	}
+	if opts.ImagePullPolicy != "" {
+		args = append(args, "--image-pull-policy", opts.ImagePullPolicy)
 	}
 	fmt.Printf("[CLI] Running: %s %s\n", cfg.AIServiceBin, strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, cfg.AIServiceBin, args...)
@@ -104,8 +105,9 @@ func CreateApp(
 	return output, nil
 }
 
-// CreateAppWithHealthAndRAG creates an application, waits for health checks, and validates RAG endpoints.
-func CreateAppWithHealthAndRAG(
+// CreateRAGAppAndValidate creates an application, waits for health checks, and validates RAG endpoints.
+// NOTE: This is intentionally RAG-specific and used only by RAG E2E tests.
+func CreateRAGAppAndValidate(
 	ctx context.Context,
 	cfg *config.Config,
 	appName string,
@@ -114,8 +116,13 @@ func CreateAppWithHealthAndRAG(
 	backendPort string,
 	uiPort string,
 	opts CreateOptions,
-	_ []string,
+	pods []string,
 ) error {
+	const (
+		maxRetries            = 10
+		waitTime              = 15 * time.Second
+		defaultCommandTimeout = 10 * time.Second
+	)
 	output, err := CreateApp(ctx, cfg, appName, template, params, opts)
 	if err != nil {
 		return err
@@ -128,19 +135,17 @@ func CreateAppWithHealthAndRAG(
 		return err
 	}
 	backendURL := fmt.Sprintf("http://%s:%s", hostIP, backendPort)
-	client := httpclient.NewHTTPClient()
-	client.BaseURL = backendURL
+	httpClient := &http.Client{
+		Timeout: defaultCommandTimeout,
+	}
 	endpoints := []string{
 		"/health",
 		"/v1/models",
 		"/db-status",
 	}
-	const (
-		maxRetries = 10
-		waitTime   = 15 * time.Second
-	)
 	for _, ep := range endpoints {
-		if err := waitForEndpointOK(client, ep, maxRetries, waitTime); err != nil {
+		fullURL := backendURL + ep
+		if err := waitForEndpointOK(httpClient, fullURL, maxRetries, waitTime); err != nil {
 			return err
 		}
 	}
@@ -152,7 +157,7 @@ func CreateAppWithHealthAndRAG(
 
 // waitForEndpointOK polls the given endpoint until it returns HTTP 200 OK or exhausts retries.
 func waitForEndpointOK(
-	client *httpclient.HTTPClient,
+	client *http.Client,
 	endpoint string,
 	maxRetries int,
 	waitTime time.Duration,
@@ -185,15 +190,36 @@ func waitForEndpointOK(
 }
 
 // extractHostIP extracts the host IP from the CLI output using regex.
+// func extractHostIP(output string) (string, error) {
+// 	const minMatchGroups = 2
+// 	re := regexp.MustCompile(`http[s]?://([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)`)
+// 	match := re.FindStringSubmatch(output)
+// 	if len(match) < minMatchGroups {
+// 		return "", fmt.Errorf("unable to determine application host IP from CLI output")
+// 	}
+
+// 	return match[1], nil
+// }
+
+// extractHostIP extracts the host IP from the CLI output using regex.
 func extractHostIP(output string) (string, error) {
 	const minMatchGroups = 2
-	re := regexp.MustCompile(`http[s]?://([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)`)
+
+	re := regexp.MustCompile(`https?://(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})`)
+
 	match := re.FindStringSubmatch(output)
 	if len(match) < minMatchGroups {
 		return "", fmt.Errorf("unable to determine application host IP from CLI output")
 	}
 
-	return match[1], nil
+	ip := match[1]
+
+	// Added IP validation:
+	if parsedIP := net.ParseIP(ip); parsedIP == nil {
+		return "", fmt.Errorf("invalid IP address extracted from CLI output: %s", ip)
+	}
+
+	return ip, nil
 }
 
 // HelpCommand runs the 'help' command with or without arguments.

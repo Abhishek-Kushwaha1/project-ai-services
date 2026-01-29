@@ -1,8 +1,8 @@
 package rag
 
-import "log"
+import "github.com/project-ai-services/ai-services/internal/pkg/logger"
 
 // GenerateEmbeddings generates vector embeddings for a document.
 func GenerateEmbeddings(docPath string) {
-	log.Println("[RAG] Placeholder for generating embeddings for:", docPath)
+	logger.Infoln("[RAG] Placeholder for generating embeddings for: " + docPath)
 }

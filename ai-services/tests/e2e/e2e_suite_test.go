@@ -112,7 +112,7 @@ var _ = AfterSuite(func() {
 
 var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 	Context("Version Command Tests", func() {
-		It("runs application version command", func() {
+		It("runs application version command", Label("spyre-independent"), func() {
 			args := []string{"version"}
 			output, err := cli.VersionCommand(ctx, cfg, args)
 			voutput, coutput, gerr := cli.GitVersionCommands(ctx)
@@ -122,19 +122,19 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 		})
 	})
 	Context("Help Command Tests", func() {
-		It("runs help command", func() {
+		It("runs help command", Label("spyre-independent"), func() {
 			args := []string{"help"}
 			output, err := cli.HelpCommand(ctx, cfg, args)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.ValidateHelpCommandOutput(output)).To(Succeed())
 		})
-		It("runs -h command", func() {
+		It("runs -h command", Label("spyre-independent"), func() {
 			args := []string{"-h"}
 			output, err := cli.HelpCommand(ctx, cfg, args)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.ValidateHelpCommandOutput(output)).To(Succeed())
 		})
-		It("runs help for a given random command", func() {
+		It("runs help for a given random command", Label("spyre-independent"), func() {
 			possibleCommands := []string{"application", "bootstrap", "completion", "version"}
 			randomIndex := rand.Intn(len(possibleCommands))
 			randomCommand := possibleCommands[randomIndex]
@@ -144,14 +144,14 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(cli.ValidateHelpRandomCommandOutput(randomCommand, output)).To(Succeed())
 		})
 	})
-	Context("Application Template Command Tests", func() {
+	Context("Application Template Command Tests", Label("spyre-independent"), func() {
 		It("runs application template command", func() {
 			output, err := cli.TemplatesCommand(ctx, cfg)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.ValidateApplicationsTemplateCommandOutput(output)).To(Succeed())
 		})
 	})
-	Context("Application Model Command Tests", func() {
+	Context("Application Model Command Tests", Label("spyre-independent"), func() {
 		It("verifies application model list command", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 			defer cancel()
@@ -160,7 +160,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(cli.ValidateModelListOutput(output, templateName)).To(Succeed())
 			fmt.Printf("[TEST] Application model list validated successfully!\n")
 		})
-		It("verifies application model info command", func() {
+		It("verifies application model info command", Label("spyre-independent"), func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 			defer cancel()
 			output, err := cli.ModelDownload(ctx, cfg, templateName)
@@ -170,31 +170,31 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 		})
 	})
 	Context("Bootstrap Steps", func() {
-		It("runs bootstrap configure", func() {
+		It("runs bootstrap configure", Label("spyre-dependent"), func() {
 			output, err := cli.BootstrapConfigure(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.ValidateBootstrapConfigureOutput(output)).To(Succeed())
 		})
-		It("runs bootstrap validate", func() {
+		It("runs bootstrap validate", Label("spyre-dependent"), func() {
 			output, err := cli.BootstrapValidate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.ValidateBootstrapValidateOutput(output)).To(Succeed())
 		})
-		It("runs full bootstrap", func() {
+		It("runs full bootstrap", Label("spyre-dependent"), func() {
 			output, err := cli.Bootstrap(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.ValidateBootstrapFullOutput(output)).To(Succeed())
 		})
 	})
 	Context("Application Image Command Tests", func() {
-		It("lists images for rag template", func() {
+		It("lists images for rag template", Label("spyre-independent"), func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 			err := cli.ListImage(ctx, cfg, templateName)
 			Expect(err).NotTo(HaveOccurred())
 			fmt.Printf("[TEST] Images listed successfully for %s template\n", templateName)
 		})
-		It("pulls images for rag template", func() {
+		It("pulls images for rag template", Label("spyre-independent"), func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
 			err := cli.PullImage(ctx, cfg, templateName)
@@ -203,7 +203,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 		})
 	})
 	Context("Application Lifecycle", func() {
-		It("creates rag application, runs health checks and validates RAG endpoints", func() {
+		It("creates rag application, runs health checks and validates RAG endpoints", Label("spyre-dependent"), func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 			defer cancel()
 
@@ -229,7 +229,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 		})
 	})
 	Context("Application Observability", func() {
-		It("verifies application ps output", func() {
+		It("verifies application ps output", Label("spyre-dependent"), func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
@@ -243,7 +243,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(cli.ValidateApplicationPS(widePsOutput)).To(Succeed())
 			fmt.Printf("[TEST] Application ps wide output validated successfully!\n")
 		})
-		It("verifies application info output", func() {
+		It("verifies application info output", Label("spyre-dependent"), func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
@@ -253,7 +253,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(cli.ValidateApplicationInfo(infoOutput, appName, templateName)).To(Succeed())
 			fmt.Printf("[TEST] Application info output validated successfully!\n")
 		})
-		It("Verifies pods existence, health status  and restart count", func() {
+		It("Verifies pods existence, health status  and restart count", Label("spyre-dependent"), func() {
 			if !podmanReady {
 				Skip("Podman not available - will be installed via bootstrap configure")
 			}
@@ -261,7 +261,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "verify containers failed")
 			fmt.Println("[TEST] Containers verified")
 		})
-		It("Verifies Exposed Ports of the application", func() {
+		It("Verifies Exposed Ports of the application", Label("spyre-dependent"), func() {
 			if !podmanReady {
 				Skip("Podman not available - will be installed via bootstrap configure")
 			}
@@ -271,7 +271,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 		})
 	})
 	Context("Application Teardown", func() {
-		It("stops the application", func() {
+		It("stops the application", Label("spyre-dependent"), func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
 
@@ -289,7 +289,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 
 			fmt.Printf("[TEST] Application %s stopped successfully using --pod\n", appName)
 		})
-		It("starts application pods", func() {
+		It("starts application pods", Label("spyre-dependent"), func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
 
@@ -306,7 +306,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(output).NotTo(BeEmpty())
 			fmt.Printf("[TEST] Application %s started successfully\n", appName)
 		})
-		It("starts document ingestion pod and validates ingestion completion", func() {
+		It("starts document ingestion pod and validates ingestion completion", Label("spyre-dependent"), func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 35*time.Minute)
 			defer cancel()
 
@@ -323,7 +323,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 
 			fmt.Printf("[TEST] Ingestion completed successfully for application %s\n", appName)
 		})
-		It("deletes the application using --skip-cleanup", func() {
+		It("deletes the application using --skip-cleanup", Label("spyre-dependent"), func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 			defer cancel()
 
@@ -335,7 +335,7 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 		})
 	})
 	Context("RAG / Golden Dataset Validation", func() {
-		It("validates responses against golden dataset", func() {
+		It("validates responses against golden dataset", Label("spyre-dependent"), func() {
 			Skip("RAG validation not implemented yet")
 		})
 	})

@@ -17,7 +17,7 @@ BUILD_CMD = CGO_ENABLED=0 $(GO) build $(BUILDFLAGS) \
   	" \
 	./cmd/ai-services
 
-TEST_CMD = ginkgo -r ./tests/e2e
+TEST_CMD = ginkgo $(TEST_ARGS) -r ./tests/e2e 
 
 .PHONY: default
 default:

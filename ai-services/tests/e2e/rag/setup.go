@@ -37,6 +37,8 @@ func startVLLMContainer(podName string, modelPath string) (err error) {
 		llmImage,
 		"--model",
 		"/model",
+		"--tokenizer",
+		"/model",
 		"--dtype",
 		"float32",
 		"--enforce-eager",
@@ -44,6 +46,8 @@ func startVLLMContainer(podName string, modelPath string) (err error) {
 		"4096",
 		"--max-num-batched-tokens",
 		"4096",
+		"--served-model-name",
+		"qwen/qwen2.5-7b-instruct",
 	}
 
 	cmd := exec.Command(command, args...)
@@ -161,7 +165,7 @@ func SetupLLMAsJudge(ctx context.Context, cfg *config.Config, runID string) (err
 }
 
 func CleanupLLMAsJudge(runID string) error {
-	logger.Infof("Starting the VLLM Container")
+	logger.Infof("Stopping the VLLM Container")
 
 	command := "podman"
 	stopArgs := []string{

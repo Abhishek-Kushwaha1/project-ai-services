@@ -121,17 +121,17 @@ func CreateAppWithHealthAndRAG(
 	uiPort string,
 	opts CreateOptions,
 	_ []string,
-) error {
+) (string, error) {
 	output, err := CreateApp(ctx, cfg, appName, template, params, opts)
 	if err != nil {
-		return err
+		return output, err
 	}
 	if err := ValidateCreateAppOutput(output, appName); err != nil {
-		return err
+		return output, err
 	}
 	hostIP, err := extractHostIP(output)
 	if err != nil {
-		return err
+		return output, err
 	}
 	backendURL := fmt.Sprintf("http://%s:%s", hostIP, backendPort)
 	client := httpclient.NewHTTPClient()
@@ -147,13 +147,13 @@ func CreateAppWithHealthAndRAG(
 	)
 	for _, ep := range endpoints {
 		if err := waitForEndpointOK(client, ep, maxRetries, waitTime); err != nil {
-			return err
+			return output, err
 		}
 	}
 	uiURL := fmt.Sprintf("http://%s:%s", hostIP, uiPort)
 	fmt.Println("[UI] Chatbot UI available at:", uiURL)
 
-	return nil
+	return output, nil
 }
 
 // waitForEndpointOK polls the given endpoint until it returns HTTP 200 OK or exhausts retries.
@@ -202,6 +202,16 @@ func extractHostIP(output string) (string, error) {
 	return match[1], nil
 }
 
+// GetBaseURL constructs the base URL from the CLI output and backend port.
+func GetBaseURL(createOutput string, backendPort string) (string, error) {
+	hostIP, err := extractHostIP(createOutput)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("http://%s:%s", hostIP, backendPort), nil
+}
+
 // HelpCommand runs the 'help' command with or without arguments.
 func HelpCommand(ctx context.Context, cfg *config.Config, args []string) (string, error) {
 	fmt.Printf("[CLI] Running: %s %s\n", cfg.AIServiceBin, strings.Join(args, " "))
@@ -215,39 +225,25 @@ func HelpCommand(ctx context.Context, cfg *config.Config, args []string) (string
 	return output, nil
 }
 
-// ApplicationPS runs the 'application ps' command to list application pods.
-func ApplicationPS(ctx context.Context, cfg *config.Config, appName string) (string, error) {
+// ApplicationPS runs the 'application ps' command with optional flags.
+func ApplicationPS(ctx context.Context, cfg *config.Config, appName string, flags ...string,
+) (string, error) {
 	args := []string{"application", "ps"}
+
 	if appName != "" {
 		args = append(args, appName)
 	}
+
+	args = append(args, flags...)
+
 	fmt.Printf("[CLI] Running: %s %s\n", cfg.AIServiceBin, strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, cfg.AIServiceBin, args...)
+
 	out, err := cmd.CombinedOutput()
 	output := string(out)
 
 	if err != nil {
 		return output, fmt.Errorf("application ps failed: %w\n%s", err, output)
-	}
-
-	return output, nil
-}
-
-// ApplicationPSWide runs the 'application ps -o wide' command to list application pods with more details.
-func ApplicationPSWide(ctx context.Context, cfg *config.Config, appName string) (string, error) {
-	args := []string{"application", "ps"}
-	if appName != "" {
-		args = append(args, appName)
-	}
-	args = append(args, "-o", "wide")
-
-	fmt.Printf("[CLI] Running: %s %s\n", cfg.AIServiceBin, strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, cfg.AIServiceBin, args...)
-	out, err := cmd.CombinedOutput()
-	output := string(out)
-
-	if err != nil {
-		return output, fmt.Errorf("application ps -o wide failed: %w\n%s", err, output)
 	}
 
 	return output, nil

@@ -6,6 +6,10 @@ import (
 	"math/rand"
 	"testing"
 	"time"
+	"os"
+	"strconv"
+	"path/filepath"
+	"runtime"
 
 	"github.com/project-ai-services/ai-services/tests/e2e/bootstrap"
 	"github.com/project-ai-services/ai-services/tests/e2e/cleanup"
@@ -13,6 +17,7 @@ import (
 	"github.com/project-ai-services/ai-services/tests/e2e/config"
 	"github.com/project-ai-services/ai-services/tests/e2e/ingestion"
 	"github.com/project-ai-services/ai-services/tests/e2e/podman"
+	"github.com/project-ai-services/ai-services/tests/e2e/rag"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -29,7 +34,15 @@ var (
 	ctx                context.Context
 	podmanReady        bool
 	templateName       string
+	goldenPath         string
+	ragBaseURL         string
+	judgeBaseURL       string
 	mainPodsByTemplate map[string][]string
+)
+
+const (
+	defaultAccuracyThreshold = 0.70
+	defaultMaxRetries        = 2
 )
 
 func TestE2E(t *testing.T) {
@@ -51,6 +64,9 @@ var _ = BeforeSuite(func() {
 	By("Setting template name")
 	templateName = "rag"
 
+	By("Setting application name")
+	appName = fmt.Sprintf("%s-app-%s", templateName, runID)
+
 	By("Setting main pods by template")
 	mainPodsByTemplate = map[string][]string{
 		"rag": {
@@ -58,6 +74,22 @@ var _ = BeforeSuite(func() {
 			"milvus",
 			"chat-bot",
 		},
+	}
+
+	By("Setting golden dataset path")
+	_, filename, _, _ := runtime.Caller(0) // returns the file path of this test file (e2e_suite_test.go)
+	e2eDir := filepath.Dir(filename)       // resolves ai-services/tests/e2e
+	repoRoot := filepath.Clean(filepath.Join(e2eDir, "../../..")) // navigates to the workspace root
+	goldenPath = filepath.Join(
+		repoRoot,
+		"test",
+		"golden",
+		"golden.csv",
+	)
+
+	By("Setting up LLM-as-Judge")
+	if err := rag.SetupLLMAsJudge(ctx, cfg, runID); err != nil {
+		Fail(fmt.Sprintf("failed to setup LLM-as-Judge: %v", err))
 	}
 
 	By("Preparing runtime environment")
@@ -103,6 +135,12 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	fmt.Println("[TEARDOWN] AI Services E2E teardown")
+
+	By("Cleaning up LLM-as-Judge container")
+	if err := rag.CleanupLLMAsJudge(runID); err != nil {
+		fmt.Printf("[TEARDOWN] Judge cleanup failed: %v\n", err)
+	}
+
 	By("Cleaning up E2E environment")
 	if err := cleanup.CleanupTemp(tempDir); err != nil {
 		fmt.Printf("[TEARDOWN] cleanup failed: %v\n", err)
@@ -207,10 +245,9 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 			defer cancel()
 
-			appName = fmt.Sprintf("%s-app-%s", templateName, runID)
 			pods := []string{"backend", "ui", "db"} // replace with actual pod names
 
-			err := cli.CreateAppWithHealthAndRAG(
+			createOutput, err := cli.CreateAppWithHealthAndRAG(
 				ctx,
 				cfg,
 				appName,
@@ -225,6 +262,18 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 				pods,
 			)
 			Expect(err).NotTo(HaveOccurred())
+
+			ragBaseURL, err = cli.GetBaseURL(createOutput, "5000")
+			Expect(err).NotTo(HaveOccurred())
+
+			judgePort := os.Getenv("LLM_JUDGE_PORT")
+			if judgePort == "" {
+				judgePort = "8011"
+			}
+
+			judgeBaseURL, err = cli.GetBaseURL(createOutput, judgePort)
+			Expect(err).NotTo(HaveOccurred())
+
 			fmt.Printf("[TEST] Application %s created, healthy, and RAG endpoints validated\n", appName)
 		})
 	})
@@ -233,15 +282,18 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
-			normalPsOutput, err := cli.ApplicationPS(ctx, cfg, appName)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cli.ValidateApplicationPS(normalPsOutput)).To(Succeed())
-			fmt.Printf("[TEST] Application ps output validated successfully!\n")
+			cases := map[string][]string{
+				"normal": nil,
+				"wide":   {"-o", "wide"},
+			}
 
-			widePsOutput, err := cli.ApplicationPSWide(ctx, cfg, appName)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cli.ValidateApplicationPS(widePsOutput)).To(Succeed())
-			fmt.Printf("[TEST] Application ps wide output validated successfully!\n")
+			for name, flags := range cases {
+				By(fmt.Sprintf("running application ps %s", name))
+
+				output, err := cli.ApplicationPS(ctx, cfg, appName, flags...)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cli.ValidateApplicationPS(output)).To(Succeed())
+			}
 		})
 		It("verifies application info output", Label("spyre-dependent"), func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -323,7 +375,86 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 
 			fmt.Printf("[TEST] Ingestion completed successfully for application %s\n", appName)
 		})
-		It("deletes the application using --skip-cleanup", Label("spyre-dependent"), func() {
+		Context("RAG Golden Dataset Validation", func() {
+			It("validates RAG answers against golden dataset", func() {
+				fmt.Println("[RAG] Starting golden dataset validation")
+
+				cases, err := rag.LoadGoldenCSV(goldenPath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cases).NotTo(BeEmpty())
+
+				accuracyThreshold := defaultAccuracyThreshold
+				if v, err := strconv.ParseFloat(os.Getenv("RAG_ACCURACY_THRESHOLD"), 64); err == nil {
+					accuracyThreshold = v
+				}
+
+				results := make([]rag.EvalResult, 0, len(cases))
+				passed := 0
+				total := len(cases)
+
+				for i, tc := range cases {
+					ctx, cancel := context.WithTimeout(context.Background(), 4 * time.Minute)
+					defer cancel()
+
+					result := rag.EvalResult{
+						Question: tc.Question,
+						Passed:   false,
+					}
+
+					// 1. Ask RAG
+					ragAns, ragErr := rag.RunWithRetry(ctx, defaultMaxRetries, func(ctx context.Context) (string, error) {
+						return rag.AskRAG(ctx, ragBaseURL, tc.Question)
+					})
+
+					if ragErr != nil {
+						result.Details = fmt.Sprintf("RAG request failed: %v", ragErr)
+						results = append(results, result)
+						
+						continue
+					}
+
+					// 2. Ask Judge with format retry
+					verdict, reason, err := rag.AskJudgeWithFormatRetry(
+						ctx,
+						defaultMaxRetries,
+						judgeBaseURL,
+						tc.Question,
+						ragAns,
+						tc.GoldenAnswer,
+					)
+					if err != nil {
+						result.Details = fmt.Sprintf("Judge failed: %v", err)
+						results = append(results, result)
+						
+						continue
+					}
+
+					result.Passed = verdict == "YES"
+					result.Details = reason
+
+					if result.Passed {
+						passed++
+					}
+
+					results = append(results, result)
+					fmt.Printf("[RAG] Evaluated question %d/%d | verdict=%s | reason=%s\n",i+1,total,verdict,reason)
+				}
+
+				accuracy := float64(passed) / float64(total)
+				rag.PrintValidationSummary(results, accuracy)
+
+				if accuracy < accuracyThreshold {
+					Fail(fmt.Sprintf(
+						"RAG accuracy %.2f below threshold %.2f",
+						accuracy,
+						accuracyThreshold,
+					))
+				}
+
+				fmt.Println("[RAG] Golden dataset validation completed")
+			})
+		})
+		It("deletes the application using --skip-cleanup", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 			defer cancel()
 
@@ -332,11 +463,6 @@ var _ = Describe("AI Services End-to-End Tests", Ordered, func() {
 			Expect(output).NotTo(BeEmpty())
 
 			fmt.Printf("[TEST] Application %s deleted successfully using --skip-cleanup\n", appName)
-		})
-	})
-	Context("RAG / Golden Dataset Validation", func() {
-		It("validates responses against golden dataset", Label("spyre-dependent"), func() {
-			Skip("RAG validation not implemented yet")
 		})
 	})
 })

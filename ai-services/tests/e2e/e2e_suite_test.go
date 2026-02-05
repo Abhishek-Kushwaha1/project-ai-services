@@ -237,7 +237,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			appName = fmt.Sprintf("rag-app-%s", runID)
 			pods := []string{"backend", "ui", "db"} // replace with actual pod names
 
-			err := cli.CreateRAGAppAndValidate(
+			createOutput, err := cli.CreateRAGAppAndValidate(
 				ctx,
 				cfg,
 				appName,

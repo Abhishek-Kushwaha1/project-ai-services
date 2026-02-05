@@ -125,7 +125,7 @@ func CreateRAGAppAndValidate(
 	uiPort string,
 	opts CreateOptions,
 	pods []string,
-) error {
+) (string, error) {
 	const (
 		maxRetries            = 10
 		waitTime              = 15 * time.Second
@@ -133,14 +133,14 @@ func CreateRAGAppAndValidate(
 	)
 	output, err := CreateApp(ctx, cfg, appName, template, params, opts)
 	if err != nil {
-		return err
+		return output, err
 	}
 	if err := ValidateCreateAppOutput(output, appName); err != nil {
-		return err
+		return output, err
 	}
 	hostIP, err := extractHostIP(output)
 	if err != nil {
-		return err
+		return output, err
 	}
 	backendURL := fmt.Sprintf("http://%s:%s", hostIP, backendPort)
 	httpClient := &http.Client{
@@ -154,13 +154,13 @@ func CreateRAGAppAndValidate(
 	for _, ep := range endpoints {
 		fullURL := backendURL + ep
 		if err := waitForEndpointOK(httpClient, fullURL, maxRetries, waitTime); err != nil {
-			return err
+			return output, err
 		}
 	}
 	uiURL := fmt.Sprintf("http://%s:%s", hostIP, uiPort)
 	fmt.Println("[UI] Chatbot UI available at:", uiURL)
 
-	return nil
+	return output, nil
 }
 
 // waitForEndpointOK polls the given endpoint until it returns HTTP 200 OK or exhausts retries.
@@ -233,16 +233,23 @@ func HelpCommand(ctx context.Context, cfg *config.Config, args []string) (string
 }
 
 // ApplicationPS runs the 'application ps' command to list application pods.
-func ApplicationPS(ctx context.Context, cfg *config.Config, appName string) (string, error) {
+func ApplicationPS(
+	ctx context.Context,
+	cfg *config.Config,
+	appName string,
+	flags ...string,
+) (string, error) {
 	args := []string{"application", "ps"}
+
 	if appName != "" {
 		args = append(args, appName)
 	}
-	fmt.Printf("[CLI] Running: %s %s\n", cfg.AIServiceBin, strings.Join(args, " "))
+
+	args = append(args, flags...)
+
 	cmd := exec.CommandContext(ctx, cfg.AIServiceBin, args...)
 	out, err := cmd.CombinedOutput()
 	output := string(out)
-	fmt.Println(output)
 
 	if err != nil {
 		return output, fmt.Errorf("application ps failed: %w\n%s", err, output)

@@ -2,9 +2,6 @@ package runtime
 
 import (
 	"io"
-
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities/types"
 )
 
 type Runtime interface {
@@ -15,9 +12,9 @@ type Runtime interface {
 	DeletePod(id string, force *bool) error
 	StopPod(id string) error
 	StartPod(id string) error
-	InspectContainer(nameOrId string) (*define.InspectContainerData, error)
+	InspectContainer(nameOrId string) (*Container, error)
 	ListContainers(filters map[string][]string) ([]Container, error)
-	InspectPod(nameOrId string) (*types.PodInspectReport, error)
+	InspectPod(nameOrId string) (*Pod, error)
 	PodExists(nameOrID string) (bool, error)
 	PodLogs(nameOrID string) error
 	ContainerLogs(containerNameOrID string) error

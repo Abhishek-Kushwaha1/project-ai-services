@@ -9,6 +9,10 @@ require (
 	github.com/containers/podman/v5 v5.6.2
 	github.com/onsi/ginkgo/v2 v2.27.2
 	github.com/onsi/gomega v1.38.2
+<<<<<<< HEAD
+=======
+	github.com/openshift/api v0.0.0-20260213123447-0246c0ac1a77
+>>>>>>> 74aa214 (Fixing go mod tidy)
 	github.com/spf13/cobra v1.10.2
 	github.com/yarlson/pin v0.9.1
 	go.yaml.in/yaml/v3 v3.0.4

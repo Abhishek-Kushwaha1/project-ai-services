@@ -10,6 +10,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+const (
+	OLMGroup       = "operators.coreos.com"
+	OLMVersion     = "v1alpha1"
+	OLMCSVList     = "ClusterServiceVersionList"
+	PhaseSucceeded = "Succeeded"
+)
+
 type OCPHelper struct {
 	client *openshift.OpenshiftClient
 }
@@ -18,10 +25,11 @@ type OCPHelper struct {
 
 func (h *OCPHelper) ValidateOperator(ctx context.Context, operatorSubstring string) error {
 	csvList := &unstructured.UnstructuredList{}
+
 	csvList.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "operators.coreos.com",
-		Version: "v1alpha1",
-		Kind:    "ClusterServiceVersionList",
+		Group:   OLMGroup,
+		Version: OLMVersion,
+		Kind:    OLMCSVList,
 	})
 
 	if err := h.client.GetClient().List(ctx, csvList); err != nil {
@@ -31,7 +39,6 @@ func (h *OCPHelper) ValidateOperator(ctx context.Context, operatorSubstring stri
 	for _, csv := range csvList.Items {
 		name := csv.GetName()
 
-		// Using LowerCase for both makes the check case-insensitive and robust
 		if !strings.Contains(strings.ToLower(name), strings.ToLower(operatorSubstring)) {
 			continue
 		}
@@ -42,8 +49,8 @@ func (h *OCPHelper) ValidateOperator(ctx context.Context, operatorSubstring stri
 			"phase",
 		)
 
-		if phase == "Succeeded" {
-			return nil // Found and healthy!
+		if phase == PhaseSucceeded {
+			return nil
 		}
 
 		return fmt.Errorf(

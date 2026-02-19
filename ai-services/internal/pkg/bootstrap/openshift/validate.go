@@ -10,14 +10,20 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 )
 
+const (
+	SecondarySchedulerOperator = "secondaryscheduler"
+	CertManagerOperator        = "cert-manager"
+	ServiceMeshOperator        = "servicemesh"
+	NFDOperator                = "nfd"
+	RHOAIOperator              = "rhods-operator"
+)
+
 func NewOCPBootstrap() (*OCPHelper, error) {
-	// 1. Actually create the client
 	client, err := openshift.NewOpenshiftClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize openshift client: %w", err)
 	}
 
-	// 2. Inject the client into the helper
 	return &OCPHelper{
 		client: client,
 	}, nil
@@ -61,6 +67,7 @@ func (o *OCPHelper) Validate(skip map[string]bool) error {
 	}
 
 	for _, check := range checks {
+		// Optional: Add skip logic here if you want to support the 'skip' map
 		if err := check.check(ctx); err != nil {
 			logger.Infoln(check.name)
 			logger.Infof("HINT: %s\n", check.hint)
@@ -81,23 +88,23 @@ func (o *OCPHelper) Validate(skip map[string]bool) error {
 }
 
 func (o *OCPHelper) validateSecondaryScheduler(ctx context.Context) error {
-	return o.ValidateOperator(ctx, "secondaryscheduler")
+	return o.ValidateOperator(ctx, SecondarySchedulerOperator)
 }
 
 func (o *OCPHelper) validateCertManager(ctx context.Context) error {
-	return o.ValidateOperator(ctx, "cert-manager")
+	return o.ValidateOperator(ctx, CertManagerOperator)
 }
 
 func (o *OCPHelper) validateServiceMesh(ctx context.Context) error {
-	return o.ValidateOperator(ctx, "servicemesh")
+	return o.ValidateOperator(ctx, ServiceMeshOperator)
 }
 
 func (o *OCPHelper) validateNodeFeatureDiscovery(ctx context.Context) error {
-	return o.ValidateOperator(ctx, "nfd")
+	return o.ValidateOperator(ctx, NFDOperator)
 }
 
 func (o *OCPHelper) validateRHOAI(ctx context.Context) error {
-	return o.ValidateOperator(ctx, "rhods-operator")
+	return o.ValidateOperator(ctx, RHOAIOperator)
 }
 
 func (o *OCPHelper) Type() types.RuntimeType {

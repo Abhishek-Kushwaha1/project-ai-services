@@ -10,8 +10,8 @@ import (
 
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -36,9 +36,9 @@ func NewOpenshiftClientWithNamespace(namespace string) (*OpenshiftClient, error)
 		return nil, fmt.Errorf("failed to get openshift config: %w", err)
 	}
 
-	clientset, err := kubernetes.NewForConfig(config)
+	kc, err := client.New(config, client.Options{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create openshift clientset: %w", err)
+		return nil, err
 	}
 
 	return &OpenshiftClient{
@@ -88,15 +88,24 @@ func (kc *OpenshiftClient) PullImage(image string) error {
 
 // ListPods lists pods with optional filters.
 func (kc *OpenshiftClient) ListPods(filters map[string][]string) ([]types.Pod, error) {
-	// Convert filters to label selector
-	var labelSelector string
-	if labelFilters, exists := filters["label"]; exists && len(labelFilters) > 0 {
-		labelSelector = strings.Join(labelFilters, ",")
+	labels := client.MatchingLabels{}
+
+	if labelFilters, exists := filters["label"]; exists {
+		for _, lf := range labelFilters {
+			parts := strings.SplitN(lf, "=", 2)
+			if len(parts) == 2 {
+				labels[parts[0]] = parts[1]
+			}
+		}
 	}
 
-	podList, err := kc.clientset.CoreV1().Pods(kc.namespace).List(kc.ctx, metav1.ListOptions{
-		LabelSelector: labelSelector,
-	})
+	podList := &corev1.PodList{}
+	err := kc.client.List(
+		kc.ctx,
+		podList,
+		client.InNamespace(kc.namespace),
+		labels,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}
@@ -176,10 +185,14 @@ func (kc *OpenshiftClient) InspectContainer(nameOrId string) (*types.Container, 
 
 // ContainerExists checks if a container exists.
 func (kc *OpenshiftClient) ContainerExists(nameOrID string) (bool, error) {
-	// In Openshift, we check if any pod contains this container
-	pods, err := kc.clientset.CoreV1().Pods(kc.namespace).List(kc.ctx, metav1.ListOptions{})
+	pods := &corev1.PodList{}
+	err := kc.client.List(
+		kc.ctx,
+		pods,
+		client.InNamespace(kc.namespace),
+	)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to list pods: %w", err)
 	}
 
 	for _, pod := range pods.Items {

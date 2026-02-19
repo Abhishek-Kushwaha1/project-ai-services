@@ -6,30 +6,11 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
-	"github.com/project-ai-services/ai-services/internal/pkg/runtime/openshift"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 )
 
-// OCPBootstrap implements the Bootstrap interface for OpenShift.
-type OCPBootstrap struct {
-	Helper *OCPHelper
-}
-
-func NewOCPBootstrap() (*OCPBootstrap, error) {
-	client, err := openshift.NewOpenshiftClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create openshift client: %w", err)
-	}
-
-	return &OCPBootstrap{
-		Helper: &OCPHelper{
-			client: client,
-		},
-	}, nil
-}
-
 // Validate validates OpenShift environment.
-func (o *OCPBootstrap) Validate(skip map[string]bool) error {
+func (o *OCPHelper) Validate(skip map[string]bool) error {
 	ctx := context.Background()
 	var validationErrors []error
 
@@ -67,12 +48,12 @@ func (o *OCPBootstrap) Validate(skip map[string]bool) error {
 
 	for _, check := range checks {
 		if err := check.check(ctx); err != nil {
-			fmt.Println(check.name)
-			fmt.Printf("HINT: %s\n", check.hint)
+			logger.Infoln(check.name)
+			logger.Infof("HINT: %s\n", check.hint)
 			validationErrors = append(validationErrors, err)
 		} else {
 			style := lipgloss.NewStyle().Foreground(lipgloss.Color("#32BD27"))
-			fmt.Printf("%s %s\n", style.Render("✓"), check.name)
+			logger.Infoln(fmt.Sprintf("%s %s", style.Render("✓"), check.name))
 		}
 	}
 
@@ -85,31 +66,31 @@ func (o *OCPBootstrap) Validate(skip map[string]bool) error {
 	return nil
 }
 
-func (o *OCPBootstrap) validateSecondaryScheduler(ctx context.Context) error {
-	return o.Helper.ValidateOperator(ctx, "secondaryscheduler")
+func (o *OCPHelper) validateSecondaryScheduler(ctx context.Context) error {
+	return o.ValidateOperator(ctx, "secondaryscheduler")
 }
 
-func (o *OCPBootstrap) validateCertManager(ctx context.Context) error {
-	return o.Helper.ValidateOperator(ctx, "cert-manager")
+func (o *OCPHelper) validateCertManager(ctx context.Context) error {
+	return o.ValidateOperator(ctx, "cert-manager")
 }
 
-func (o *OCPBootstrap) validateServiceMesh(ctx context.Context) error {
-	return o.Helper.ValidateOperator(ctx, "servicemesh")
+func (o *OCPHelper) validateServiceMesh(ctx context.Context) error {
+	return o.ValidateOperator(ctx, "servicemesh")
 }
 
-func (o *OCPBootstrap) validateNodeFeatureDiscovery(ctx context.Context) error {
-	return o.Helper.ValidateOperator(ctx, "nfd")
+func (o *OCPHelper) validateNodeFeatureDiscovery(ctx context.Context) error {
+	return o.ValidateOperator(ctx, "nfd")
 }
 
-func (o *OCPBootstrap) validateRHOAI(ctx context.Context) error {
-	return o.Helper.ValidateOperator(ctx, "rhods-operator")
+func (o *OCPHelper) validateRHOAI(ctx context.Context) error {
+	return o.ValidateOperator(ctx, "rhods-operator")
 }
 
-func (o *OCPBootstrap) Type() types.RuntimeType {
+func (o *OCPHelper) Type() types.RuntimeType {
 	return types.RuntimeTypeOpenShift
 }
 
-func (o *OCPBootstrap) Configure() error {
+func (o *OCPHelper) Configure() error {
 	logger.Infoln("OpenShift environment is pre-configured. Skipping configuration.")
 
 	return nil

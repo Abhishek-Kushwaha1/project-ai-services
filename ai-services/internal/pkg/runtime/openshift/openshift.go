@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	ExpectedParts = 2
+	labelPartsCount = 2 // labelPartsCount is used to split label filters in the format "key=value".
 )
 
 // OpenshiftClient implements the Runtime interface for Openshift.
@@ -107,8 +107,8 @@ func (kc *OpenshiftClient) ListPods(filters map[string][]string) ([]types.Pod, e
 
 	if labelFilters, exists := filters["label"]; exists {
 		for _, lf := range labelFilters {
-			parts := strings.SplitN(lf, "=", ExpectedParts)
-			if len(parts) == ExpectedParts {
+			parts := strings.SplitN(lf, "=", labelPartsCount)
+			if len(parts) == labelPartsCount {
 				labels[parts[0]] = parts[1]
 			}
 		}

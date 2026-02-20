@@ -30,9 +30,9 @@ func (f *BootstrapFactory) Create() (Bootstrap, error) {
 		return podman.NewPodmanBootstrap(), nil
 
 	case types.RuntimeTypeOpenShift:
-		logger.Infof("Initializing OpenShift bootstrap", logger.VerbosityLevelDebug)
+		logger.Infof("Initializing OpenShift bootstrap\n", logger.VerbosityLevelDebug)
 
-		return openshift.NewOCPBootstrap()
+		return openshift.NewOpenshiftBootstrap(), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported runtime type: %s", f.runtimeType)

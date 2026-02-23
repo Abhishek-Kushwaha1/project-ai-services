@@ -16,12 +16,63 @@ const (
 	RHOAIOperator              = "rhods-operator"
 )
 
-// Validate validates OpenShift environment.
 func (o *OpenshiftBootstrap) Validate(skip map[string]bool) error {
 	ctx := context.Background()
+
+	if err := o.validateAuthentication(ctx); err != nil {
+		return err
+	}
+
+	if err := o.validateOperators(ctx); err != nil {
+		return err
+	}
+
+	logger.Infoln("All validations passed")
+
+	return nil
+}
+
+func (o *OpenshiftBootstrap) validateAuthentication(ctx context.Context) error {
+	if err := ValidateAuthentication(ctx); err != nil {
+		logger.Infoln("Authentication to OpenShift cluster")
+		logger.Infof("HINT: %s\n", "Check your Kubeconfig and cluster access")
+
+		return fmt.Errorf("cluster authentication failed: %w", err)
+	}
+
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#32BD27"))
+	logger.Infoln(fmt.Sprintf("%s %s", style.Render("✓"), "Authentication to OpenShift cluster"))
+
+	return nil
+}
+
+func (o *OpenshiftBootstrap) validateOperators(ctx context.Context) error {
 	var validationErrors []error
 
-	checks := []struct {
+	for _, check := range getOperatorChecks() {
+		if err := ValidateOperator(ctx, check.operator); err != nil {
+			logger.Infoln(check.name)
+			logger.Infof("HINT: %s\n", check.hint)
+			validationErrors = append(validationErrors, err)
+		} else {
+			style := lipgloss.NewStyle().Foreground(lipgloss.Color("#32BD27"))
+			logger.Infoln(fmt.Sprintf("%s %s", style.Render("✓"), check.name))
+		}
+	}
+
+	if len(validationErrors) > 0 {
+		return fmt.Errorf("bootstrap validation failed: %d validation(s) failed", len(validationErrors))
+	}
+
+	return nil
+}
+
+func getOperatorChecks() []struct {
+	name     string
+	operator string
+	hint     string
+} {
+	return []struct {
 		name     string
 		operator string
 		hint     string
@@ -52,23 +103,4 @@ func (o *OpenshiftBootstrap) Validate(skip map[string]bool) error {
 			"Install RHOAI Operator or check CSV phase",
 		},
 	}
-
-	for _, check := range checks {
-		if err := ValidateOperator(ctx, check.operator); err != nil {
-			logger.Infoln(check.name)
-			logger.Infof("HINT: %s\n", check.hint)
-			validationErrors = append(validationErrors, err)
-		} else {
-			style := lipgloss.NewStyle().Foreground(lipgloss.Color("#32BD27"))
-			logger.Infoln(fmt.Sprintf("%s %s", style.Render("✓"), check.name))
-		}
-	}
-
-	if len(validationErrors) > 0 {
-		return fmt.Errorf("bootstrap validation failed: %d validation(s) failed", len(validationErrors))
-	}
-
-	logger.Infoln("All validations passed")
-
-	return nil
 }

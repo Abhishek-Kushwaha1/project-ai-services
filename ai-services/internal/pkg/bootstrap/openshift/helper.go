@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/openshift"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -16,6 +17,22 @@ const (
 	OLMCSVList     = "ClusterServiceVersionList"
 	PhaseSucceeded = "Succeeded"
 )
+
+// ValidateAuthentication verifies that the Kubeconfig can access the OpenShift cluster.
+func ValidateAuthentication(ctx context.Context) error {
+	nsList := &corev1.NamespaceList{}
+
+	client, err := openshift.NewOpenshiftClient()
+	if err != nil {
+		return fmt.Errorf("failed to create OpenShift client: %w", err)
+	}
+
+	if err := client.Client.List(ctx, nsList); err != nil {
+		return fmt.Errorf("failed to connect to OpenShift cluster: %w", err)
+	}
+
+	return nil
+}
 
 /* ---------- Operator Validation ---------- */
 

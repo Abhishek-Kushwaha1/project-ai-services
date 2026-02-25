@@ -17,7 +17,7 @@ func NewStorageClassRule() *StorageClassRule {
 }
 
 func (r *StorageClassRule) Name() string {
-	return "default-storage-class"
+	return "default-sc"
 }
 
 func (r *StorageClassRule) Description() string {
@@ -52,7 +52,7 @@ func (r *StorageClassRule) Verify() error {
 }
 
 func (r *StorageClassRule) Message() string {
-	return "Default storage class configured"
+	return "Default storage class validated"
 }
 
 func (r *StorageClassRule) Level() constants.ValidationLevel {

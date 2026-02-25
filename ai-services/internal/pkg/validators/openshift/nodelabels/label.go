@@ -6,12 +6,15 @@ import (
 	"strings"
 
 	"github.com/project-ai-services/ai-services/internal/pkg/constants"
+	openshiftconst "github.com/project-ai-services/ai-services/internal/pkg/constants/openshift"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/openshift"
 	corev1 "k8s.io/api/core/v1"
 )
 
+// NodeLabelsRule validates node labels in the OpenShift cluster.
 type NodeLabelsRule struct{}
 
+// NewNodeLabelsRule returns a new NodeLabelsRule instance.
 func NewNodeLabelsRule() *NodeLabelsRule {
 	return &NodeLabelsRule{}
 }
@@ -21,16 +24,16 @@ func (r *NodeLabelsRule) Name() string {
 }
 
 func (r *NodeLabelsRule) Description() string {
-	return "Validates node architecture (ppc64le) and OS (rhel)"
+	return "Validates node architecture, OS, and at least one node with Spyre."
 }
 
-// Verify checks if all nodes in the OpenShift cluster have the required labels.
+// Verify checks node labels in the cluster.
 func (r *NodeLabelsRule) Verify() error {
 	ctx := context.Background()
 
 	client, err := openshift.NewOpenshiftClient()
 	if err != nil {
-		return fmt.Errorf("failed to create openshift client: %w", err)
+		return fmt.Errorf("failed to create OpenShift client: %w", err)
 	}
 
 	nodeList := &corev1.NodeList{}
@@ -42,42 +45,62 @@ func (r *NodeLabelsRule) Verify() error {
 		return fmt.Errorf("no nodes found in cluster")
 	}
 
-	var failed []string
-	hasWorkerNode := false
-
-	// Validate each node's labels for architecture and OS, and check for worker nodes.
-	for _, node := range nodeList.Items {
-		labels := node.Labels
-
-		if labels["kubernetes.io/arch"] != "ppc64le" {
-			failed = append(failed,
-				fmt.Sprintf("  - %s must have kubernetes.io/arch=ppc64le", node.Name))
-		}
-
-		if labels["node.openshift.io/os_id"] != "rhel" {
-			failed = append(failed,
-				fmt.Sprintf("  - %s must have node.openshift.io/os_id=rhel", node.Name))
-		}
-
-		if _, isWorker := labels["node-role.kubernetes.io/worker"]; isWorker {
-			hasWorkerNode = true
-		}
-	}
-
-	if !hasWorkerNode {
-		failed = append(failed, "  - no worker nodes found in cluster")
-	}
-
+	failed := r.validateNodes(nodeList.Items)
 	if len(failed) > 0 {
-		return fmt.Errorf("node label validation failed:\n%s",
-			strings.Join(failed, "\n"))
+		return fmt.Errorf("node label validation failed:\n%s", strings.Join(failed, "\n"))
 	}
 
 	return nil
 }
 
+// validateNodes performs the actual node checks.
+func (r *NodeLabelsRule) validateNodes(nodes []corev1.Node) []string {
+	var failed []string
+	hasSpyreNode := false
+
+	for _, node := range nodes {
+		labels := node.Labels
+		if err := r.checkArch(node.Name, labels); err != nil {
+			failed = append(failed, err.Error())
+		}
+		if err := r.checkOS(node.Name, labels); err != nil {
+			failed = append(failed, err.Error())
+		}
+		if r.checkSpyre(labels) {
+			hasSpyreNode = true
+		}
+	}
+
+	if !hasSpyreNode {
+		failed = append(failed, " - no node with ibm.com/spyre.present=true found")
+	}
+
+	return failed
+}
+
+func (r *NodeLabelsRule) checkArch(nodeName string, labels map[string]string) error {
+	if labels[openshiftconst.NodeArchLabel] != openshiftconst.NodeArch {
+		return fmt.Errorf("  - %s must have %s=%s", nodeName, openshiftconst.NodeArchLabel, openshiftconst.NodeArch)
+	}
+	return nil
+}
+
+func (r *NodeLabelsRule) checkOS(nodeName string, labels map[string]string) error {
+	if labels[openshiftconst.NodeOSLabel] != openshiftconst.NodeOSRHEL {
+		return fmt.Errorf("  - %s must have %s=%s", nodeName, openshiftconst.NodeOSLabel, openshiftconst.NodeOSRHEL)
+	}
+	return nil
+}
+
+func (r *NodeLabelsRule) checkSpyre(labels map[string]string) bool {
+	if val, ok := labels[openshiftconst.SpyreLabel]; ok && val == openshiftconst.SpyreLabelTrue {
+		return true
+	}
+	return false
+}
+
 func (r *NodeLabelsRule) Message() string {
-	return "Node labels validated for ppc arch and rhel os"
+	return "Node labels validated"
 }
 
 func (r *NodeLabelsRule) Level() constants.ValidationLevel {
@@ -85,5 +108,5 @@ func (r *NodeLabelsRule) Level() constants.ValidationLevel {
 }
 
 func (r *NodeLabelsRule) Hint() string {
-	return "Ensure all nodes have kubernetes.io/arch=ppc64le and node.openshift.io/os_id=rhel"
+	return "Ensure nodes have correct arch, OS, and at least one Spyre node"
 }

@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/project-ai-services/ai-services/internal/pkg/constants"
+	kubeconfig "github.com/project-ai-services/ai-services/internal/pkg/validators/openshift/kubeconfig"
 	operators "github.com/project-ai-services/ai-services/internal/pkg/validators/openshift/operators"
 	storageclass "github.com/project-ai-services/ai-services/internal/pkg/validators/openshift/storageclass"
 	"github.com/project-ai-services/ai-services/internal/pkg/validators/podman/numa"
@@ -28,6 +29,7 @@ func init() {
 	PodmanRegistry.Register(servicereport.NewServiceReportRule())
 
 	// OpenshiftChecks
+	OpenshiftRegistry.Register(kubeconfig.NewKubeconfigRule())
 	OpenshiftRegistry.Register(operators.NewOperatorRule())
 	OpenshiftRegistry.Register(storageclass.NewStorageClassRule())
 }

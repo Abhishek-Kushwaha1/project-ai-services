@@ -43,7 +43,8 @@ func (r *StorageClassRule) Verify() error {
 	}
 
 	for _, sc := range scList.Items {
-		if sc.Annotations[openshiftconst.StorageClassDefaultAnnotation] == openshiftconst.StorageClassDefaultValue {
+		val, exists := sc.Annotations[openshiftconst.StorageClassDefaultAnnotation]
+		if exists && val == "true" {
 			return nil
 		}
 	}

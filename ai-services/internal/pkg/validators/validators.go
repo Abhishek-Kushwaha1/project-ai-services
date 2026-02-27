@@ -7,6 +7,7 @@ import (
 	nodelabels "github.com/project-ai-services/ai-services/internal/pkg/validators/openshift/nodelabels"
 	kubeconfig "github.com/project-ai-services/ai-services/internal/pkg/validators/openshift/kubeconfig"
 	operators "github.com/project-ai-services/ai-services/internal/pkg/validators/openshift/operators"
+	storageclass "github.com/project-ai-services/ai-services/internal/pkg/validators/openshift/storageclass"
 	"github.com/project-ai-services/ai-services/internal/pkg/validators/podman/numa"
 	"github.com/project-ai-services/ai-services/internal/pkg/validators/podman/platform"
 	"github.com/project-ai-services/ai-services/internal/pkg/validators/podman/power"
@@ -32,6 +33,7 @@ func init() {
 	OpenshiftRegistry.Register(kubeconfig.NewKubeconfigRule())
 	OpenshiftRegistry.Register(operators.NewOperatorRule())
 	OpenshiftRegistry.Register(nodelabels.NewNodeLabelsRule())
+	OpenshiftRegistry.Register(storageclass.NewStorageClassRule())
 }
 
 // Rule defines the interface for validation rules.

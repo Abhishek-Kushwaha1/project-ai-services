@@ -33,7 +33,7 @@ func (o *OpenshiftBootstrap) Configure() error {
 	}
 
 	// 1. Apply all yamls
-	s := spinner.New("Applying assets")
+	s := spinner.New("Applying the configurations")
 	s.Start(client.Ctx)
 
 	// iterate through the directory and apply the YAMLs
@@ -42,7 +42,7 @@ func (o *OpenshiftBootstrap) Configure() error {
 
 		return fmt.Errorf("error occurred while applying YAMLs: %w", err)
 	}
-	s.Stop("Assets Applied")
+	s.Stop("Configurations applied successfully")
 
 	s = spinner.New("Waiting for spyre operator to be ready")
 	s.Start(client.Ctx)
@@ -228,7 +228,7 @@ func fetchSpyreOperator(ctx context.Context, c k8sClient.Client) (*operatorsv1al
 }
 
 func waitForSpyreOperator(ctx context.Context, c k8sClient.Client) error {
-	return wait.PollUntilContextTimeout(ctx, constants.OperatorpPollInterval, constants.OperatorpPollTimeout, true, func(ctx context.Context) (bool, error) {
+	return wait.PollUntilContextTimeout(ctx, constants.OperatorPollInterval, constants.OperatorPollTimeout, true, func(ctx context.Context) (bool, error) {
 		csv, err := fetchSpyreOperator(ctx, c)
 		if err != nil {
 			if apierrors.IsNotFound(err) {

@@ -7,8 +7,8 @@ const (
 	PodStartOff            = "off"
 	ApplicationsPath       = "/var/lib/ai-services/applications"
 	SpyreOperatorNamespace = "spyre-operator"
-	OperatorpPollInterval  = 5 * time.Second
-	OperatorpPollTimeout   = 2 * time.Minute
+	OperatorPollInterval   = 5 * time.Second
+	OperatorPollTimeout    = 2 * time.Minute
 )
 
 type ValidationLevel int

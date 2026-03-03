@@ -49,7 +49,7 @@ func (r *SpyrePolicyRule) Verify() error {
 		Kind:    spyreKind,
 	})
 
-	return wait.PollUntilContextTimeout(client.Ctx, constants.OperatorpPollInterval, constants.OperatorpPollTimeout, true, func(ctx context.Context) (bool, error) {
+	return wait.PollUntilContextTimeout(client.Ctx, constants.OperatorPollInterval, constants.OperatorPollTimeout, true, func(ctx context.Context) (bool, error) {
 		if err := client.Client.Get(ctx, types.NamespacedName{
 			Name:      spyreName,
 			Namespace: constants.SpyreOperatorNamespace,

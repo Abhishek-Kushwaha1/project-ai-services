@@ -124,7 +124,7 @@ func validateOperator(c *openshift.OpenshiftClient, csvList *unstructured.Unstru
 		}
 
 		// operator found, wait until it is ready
-		return wait.PollUntilContextTimeout(c.Ctx, constants.OperatorpPollInterval, constants.OperatorpPollTimeout, true, func(ctx context.Context) (done bool, err error) {
+		return wait.PollUntilContextTimeout(c.Ctx, constants.OperatorPollInterval, constants.OperatorPollTimeout, true, func(ctx context.Context) (done bool, err error) {
 			current := &unstructured.Unstructured{}
 			current.SetGroupVersionKind(csv.GroupVersionKind())
 

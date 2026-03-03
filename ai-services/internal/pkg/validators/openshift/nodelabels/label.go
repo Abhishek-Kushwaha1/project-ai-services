@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	SpyreLabel     = "ibm.com/spyre.present"
-	NodeRoleWorker = "node-role.kubernetes.io/worker"
 	SpyreLabelTrue = "true"
+	NodeRoleSpyre  = "node-role.kubernetes.io/spyre"
+	NodeRoleWorker = "node-role.kubernetes.io/worker"
 )
 
 type NodeLabelsRule struct{}
@@ -59,30 +59,19 @@ func (r *NodeLabelsRule) Verify() error {
 // validateNodes performs the actual node checks.
 func (r *NodeLabelsRule) validateNodes(nodes []corev1.Node) []string {
 	var failed []string
+
 	for _, node := range nodes {
 		labels := node.Labels
-		if r.checkSpyre(labels) && r.checkWorker(labels) {
+		_, hasSpyre := labels[NodeRoleSpyre]
+		_, hasWorker := labels[NodeRoleWorker]
+
+		if hasSpyre && hasWorker {
 			return failed
 		}
 	}
 
+	// No node had both labels
 	return append(failed, "no nodes with spyre and worker labels found")
-}
-
-func (r *NodeLabelsRule) checkSpyre(labels map[string]string) bool {
-	if val, ok := labels[SpyreLabel]; ok && val == SpyreLabelTrue {
-		return true
-	}
-
-	return false
-}
-
-func (r *NodeLabelsRule) checkWorker(labels map[string]string) bool {
-	if _, ok := labels[NodeRoleWorker]; ok {
-		return true
-	}
-
-	return false
 }
 
 func (r *NodeLabelsRule) Message() string {

@@ -1,7 +1,6 @@
 package nodelabels
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -35,7 +34,7 @@ func (r *NodeLabelsRule) Description() string {
 
 // Verify checks node labels in the cluster.
 func (r *NodeLabelsRule) Verify() error {
-	ctx := context.Background()
+	ctx := r.client.Ctx
 
 	if r.client == nil {
 		return fmt.Errorf("openshift client is not initialized")

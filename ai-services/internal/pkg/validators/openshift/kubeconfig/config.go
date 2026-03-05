@@ -1,7 +1,6 @@
 package kubeconfig
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/project-ai-services/ai-services/internal/pkg/constants"
@@ -29,7 +28,7 @@ func (r *KubeconfigRule) Description() string {
 
 // Verify checks if the kubeconfig can access the OpenShift cluster.
 func (r *KubeconfigRule) Verify() error {
-	ctx := context.Background()
+	ctx := r.client.Ctx
 
 	if r.client == nil {
 		return fmt.Errorf("openshift client is not initialized")

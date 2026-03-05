@@ -1,7 +1,6 @@
 package storageclass
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/project-ai-services/ai-services/internal/pkg/constants"
@@ -34,7 +33,7 @@ func (r *StorageClassRule) Description() string {
 
 // Verify checks if a default StorageClass exists.
 func (r *StorageClassRule) Verify() error {
-	ctx := context.Background()
+	ctx := r.client.Ctx
 	scList := &storagev1.StorageClassList{}
 
 	if err := r.client.Client.List(ctx, scList); err != nil {

@@ -1,7 +1,6 @@
 package spyrepolicy
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/project-ai-services/ai-services/internal/pkg/constants"
@@ -38,7 +37,7 @@ func (r *SpyrePolicyRule) Description() string {
 
 // Verify performs a direct fetch.
 func (r *SpyrePolicyRule) Verify() error {
-	ctx := context.Background()
+	ctx := r.client.Ctx
 
 	if r.client == nil {
 		return fmt.Errorf("openshift client is not initialized")

@@ -5,15 +5,9 @@ const (
 	coreGroup     = ""
 	rbacGroup     = "rbac.authorization.k8s.io"
 	sccGroup      = "security.openshift.io"
-	spyreGroup    = "spyre.ibm.com"
-	certGroup     = "cert-manager.io"
-	nfdGroup      = "nfd.openshift.io"
-	rhodsGroup    = "datasciencecluster.opendatahub.io"
-	dsciGroup     = "dscinitialization.opendatahub.io"
-	mcGroup       = "machineconfiguration.openshift.io"
 )
 
-// permissionCheck defines a permission that needs to be validated
+// permissionCheck defines a permission that needs to be validated.
 type permissionCheck struct {
 	group     string
 	resource  string
@@ -21,8 +15,8 @@ type permissionCheck struct {
 	namespace string // empty string means cluster-scoped
 }
 
-// getBootstrapWildcardPermissions returns wildcard permission checks for bootstrap operations
-// Using wildcards (*) to check for admin-level permissions across resource groups needed for cluster bootstrap
+// getBootstrapWildcardPermissions returns wildcard permission checks for bootstrap operations.
+// Focuses on core operator installation permissions - operators manage their own custom resources.
 func getBootstrapWildcardPermissions() []permissionCheck {
 	return []permissionCheck{
 		// Check for all verbs on all resources in operators.coreos.com group (covers operatorgroups, subscriptions, csvs)
@@ -30,29 +24,11 @@ func getBootstrapWildcardPermissions() []permissionCheck {
 
 		// Check for all verbs on all resources in core group (covers namespaces)
 		{group: coreGroup, resource: "*", verb: "*", namespace: ""},
-
-		// Check for all verbs on all resources in spyre.ibm.com group
-		{group: spyreGroup, resource: "*", verb: "*", namespace: ""},
-
-		// Check for all verbs on all resources in cert-manager.io group
-		{group: certGroup, resource: "*", verb: "*", namespace: ""},
-
-		// Check for all verbs on all resources in nfd.openshift.io group
-		{group: nfdGroup, resource: "*", verb: "*", namespace: ""},
-
-		// Check for all verbs on all resources in datasciencecluster.opendatahub.io group
-		{group: rhodsGroup, resource: "*", verb: "*", namespace: ""},
-
-		// Check for all verbs on all resources in dscinitialization.opendatahub.io group
-		{group: dsciGroup, resource: "*", verb: "*", namespace: ""},
-
-		// Check for all verbs on all resources in machineconfiguration.openshift.io group
-		{group: mcGroup, resource: "*", verb: "*", namespace: ""},
 	}
 }
 
-// getApplicationCreateWildcardPermissions returns wildcard permission checks for application creation
-// Using wildcards (*) to check for admin-level permissions needed for deploying applications
+// getApplicationCreateWildcardPermissions returns wildcard permission checks for application creation.
+// Using wildcards (*) to check for admin-level permissions needed for deploying applications.
 func getApplicationCreateWildcardPermissions() []permissionCheck {
 	return []permissionCheck{
 		// Check for all verbs on all resources in security.openshift.io group (covers SCCs)
@@ -63,9 +39,9 @@ func getApplicationCreateWildcardPermissions() []permissionCheck {
 	}
 }
 
-// getBootstrapSpecificPermissions returns detailed permission checks for bootstrap operations
+// getBootstrapSpecificPermissions returns detailed permission checks for bootstrap operations.
 // Focuses on core operator installation permissions - if user can install operators,
-// they typically have permissions for the custom resources those operators manage
+// they typically have permissions for the custom resources those operators manage.
 func getBootstrapSpecificPermissions() []permissionCheck {
 	return []permissionCheck{
 		// Namespace operations (cluster-scoped)
@@ -88,8 +64,8 @@ func getBootstrapSpecificPermissions() []permissionCheck {
 	}
 }
 
-// getApplicationCreateSpecificPermissions returns detailed permission checks for application creation
-// These are the exact permissions needed for deploying applications with SCC bindings
+// getApplicationCreateSpecificPermissions returns detailed permission checks for application creation.
+// These are the exact permissions needed for deploying applications with SCC bindings.
 func getApplicationCreateSpecificPermissions() []permissionCheck {
 	return []permissionCheck{
 		// SecurityContextConstraints "use" permission (needed to grant SCC usage in Roles)
@@ -108,17 +84,19 @@ func getApplicationCreateSpecificPermissions() []permissionCheck {
 	}
 }
 
-// getWildcardPermissions returns all wildcard permission checks (bootstrap + application create)
+// getWildcardPermissions returns all wildcard permission checks (bootstrap + application create).
 func getWildcardPermissions() []permissionCheck {
 	perms := getBootstrapWildcardPermissions()
 	perms = append(perms, getApplicationCreateWildcardPermissions()...)
+
 	return perms
 }
 
-// getSpecificPermissions returns all specific permission checks (bootstrap + application create)
+// getSpecificPermissions returns all specific permission checks (bootstrap + application create).
 func getSpecificPermissions() []permissionCheck {
 	perms := getBootstrapSpecificPermissions()
 	perms = append(perms, getApplicationCreateSpecificPermissions()...)
+
 	return perms
 }
 

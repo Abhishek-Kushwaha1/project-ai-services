@@ -6,7 +6,15 @@ import (
 
 	"github.com/project-ai-services/ai-services/internal/pkg/constants"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/openshift"
+	authv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
+)
+
+const (
+	operatorGroup     = "operators.coreos.com"
+	operatorResource  = "subscriptions"
+	operatorVerb      = "create"
+	operatorNamespace = "openshift-operators"
 )
 
 type KubeconfigRule struct{}
@@ -20,7 +28,7 @@ func (r *KubeconfigRule) Name() string {
 }
 
 func (r *KubeconfigRule) Description() string {
-	return "Validates that kubeconfig can access the OpenShift cluster"
+	return "Validates cluster access and operator installation permission"
 }
 
 // Verify checks if the kubeconfig can access the OpenShift cluster.
@@ -37,11 +45,30 @@ func (r *KubeconfigRule) Verify() error {
 		return fmt.Errorf("failed to connect to cluster: %w", err)
 	}
 
+	review := &authv1.SelfSubjectAccessReview{
+		Spec: authv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authv1.ResourceAttributes{
+				Group:     operatorGroup,
+				Resource:  operatorResource,
+				Verb:      operatorVerb,
+				Namespace: operatorNamespace,
+			},
+		},
+	}
+
+	if err := client.Client.Create(ctx, review); err != nil {
+		return fmt.Errorf("failed to validate operator install permission: %w", err)
+	}
+
+	if review.Status.Denied || !review.Status.Allowed {
+		return fmt.Errorf("user does not have permission to install operators")
+	}
+
 	return nil
 }
 
 func (r *KubeconfigRule) Message() string {
-	return "Cluster authentication successful"
+	return "Cluster authentication and operator permission validated"
 }
 
 func (r *KubeconfigRule) Level() constants.ValidationLevel {

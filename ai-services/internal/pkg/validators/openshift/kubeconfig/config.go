@@ -44,6 +44,7 @@ func (r *KubeconfigRule) Verify() error {
 	for _, perm := range wildcardPermissions {
 		if err := r.checkPermission(ctx, client, perm); err != nil {
 			allWildcardsPassed = false
+
 			break
 		}
 	}
@@ -64,7 +65,7 @@ func (r *KubeconfigRule) Verify() error {
 	return nil
 }
 
-// checkPermission validates a specific permission using SelfSubjectAccessReview
+// checkPermission validates a specific permission using SelfSubjectAccessReview.
 func (r *KubeconfigRule) checkPermission(ctx context.Context, client *openshift.OpenshiftClient, perm permissionCheck) error {
 	review := &authv1.SelfSubjectAccessReview{
 		Spec: authv1.SelfSubjectAccessReviewSpec{
@@ -85,6 +86,7 @@ func (r *KubeconfigRule) checkPermission(ctx context.Context, client *openshift.
 		if perm.namespace != "" {
 			return fmt.Errorf("user does not have permission to %s %s in namespace %s", perm.verb, perm.resource, perm.namespace)
 		}
+
 		return fmt.Errorf("user does not have permission to %s %s", perm.verb, perm.resource)
 	}
 

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class OutputFormat(str, Enum):
-    TEXT = "text"
+    TEXT = "txt"
     MD = "md"
     JSON = "json"
 
@@ -46,6 +46,12 @@ class DocumentListItem(BaseModel):
     name: str
     type: str
     status: str
+
+
+class DocumentsListResponse(BaseModel):
+    """Response model for documents list endpoint with pagination."""
+    pagination: PaginationInfo
+    data: List[DocumentListItem]
 
 
 class DocumentDetailResponse(BaseModel):

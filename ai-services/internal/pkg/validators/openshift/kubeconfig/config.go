@@ -8,6 +8,7 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/openshift"
 	authv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8sClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type KubeconfigRule struct{}
@@ -34,8 +35,10 @@ func (r *KubeconfigRule) Verify() error {
 	}
 
 	// Validate cluster access by listing namespaces
-	if err := client.Client.List(ctx, &corev1.NamespaceList{}); err != nil {
-		return fmt.Errorf("failed to connect to cluster: %w", err)
+	ns := &corev1.Namespace{}
+	key := k8sClient.ObjectKey{Name: "default"}
+	if err := client.Client.Get(ctx, key, ns); err != nil {
+		return fmt.Errorf("failed to get namespace %s: %w", key.Name, err)
 	}
 
 	// First, try checking with wildcard permissions (more efficient for cluster-admin users)

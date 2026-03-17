@@ -263,6 +263,9 @@ func frameAndApply(client *openshift.OpenshiftClient, spec map[string]any, s *sp
 
 			return nil
 		}
+		if apierrors.IsForbidden(err) {
+			return fmt.Errorf("RBAC error: missing required permissions to create SpyreClusterPolicy: %w", err)
+		}
 	}
 
 	return err
@@ -282,6 +285,9 @@ func waitForSpyreClusterPolicy(client *openshift.OpenshiftClient) error {
 				logger.Infof("SpyreClusterPolicy not found yet, waiting...", logger.VerbosityLevelDebug)
 
 				return false, nil
+			}
+			if apierrors.IsForbidden(err) {
+				return false, fmt.Errorf("RBAC error: missing required permissions to get SpyreClusterPolicy: %w", err)
 			}
 
 			return false, fmt.Errorf("failed to get SpyreClusterPolicy: %w", err)
@@ -387,6 +393,9 @@ func getExistingResourceName(client *openshift.OpenshiftClient, kind string) (st
 		if apierrors.IsNotFound(err) {
 			return "", false, nil
 		}
+		if apierrors.IsForbidden(err) {
+			return "", false, fmt.Errorf("RBAC error: missing required permissions to list %s: %w", kind, err)
+		}
 
 		return "", false, fmt.Errorf("error listing %s: %w", kind, err)
 	}
@@ -412,6 +421,10 @@ func waitForRHODSResource(client *openshift.OpenshiftClient, kind, name string) 
 				logger.Infof("%s not found yet, waiting...", kind, logger.VerbosityLevelDebug)
 
 				return false, nil
+
+			}
+			if apierrors.IsForbidden(err) {
+				return false, fmt.Errorf("RBAC error: missing required permissions to get %s: %w", kind, err)
 			}
 
 			return false, fmt.Errorf("failed to get %s: %w", kind, err)

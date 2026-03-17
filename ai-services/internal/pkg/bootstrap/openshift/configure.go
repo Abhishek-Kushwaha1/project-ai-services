@@ -390,33 +390,6 @@ func updateRHODSResourceNames(yamlBytes []byte, existingResources map[string]str
 	return updatedYaml, nil
 }
 
-// getExistingResourceName checks if a single instance resource exists and returns its name.
-func getExistingResourceName(client *openshift.OpenshiftClient, kind string) (string, bool, error) {
-	list := &unstructured.UnstructuredList{}
-	list.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   strings.ToLower(kind) + ".opendatahub.io",
-		Version: "v2",
-		Kind:    kind,
-	})
-
-	if err := client.Client.List(client.Ctx, list); err != nil {
-		if apierrors.IsNotFound(err) {
-			return "", false, nil
-		}
-		if apierrors.IsForbidden(err) {
-			return "", false, fmt.Errorf("RBAC error: missing required permissions to list %s: %w", kind, err)
-		}
-
-		return "", false, fmt.Errorf("error listing %s: %w", kind, err)
-	}
-
-	if len(list.Items) == 0 {
-		return "", false, nil
-	}
-
-	return list.Items[0].GetName(), true, nil
-}
-
 func waitForRHODSResource(client *openshift.OpenshiftClient, kind, name string) error {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{
@@ -431,7 +404,6 @@ func waitForRHODSResource(client *openshift.OpenshiftClient, kind, name string) 
 				logger.Infof("%s not found yet, waiting...", kind, logger.VerbosityLevelDebug)
 
 				return false, nil
-
 			}
 			if apierrors.IsForbidden(err) {
 				return false, fmt.Errorf("RBAC error: missing required permissions to get %s: %w", kind, err)

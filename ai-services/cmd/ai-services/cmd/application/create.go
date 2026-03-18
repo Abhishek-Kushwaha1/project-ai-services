@@ -97,18 +97,6 @@ func doBootstrapValidate() error {
 	if len(skip) > 0 {
 		logger.Warningf("Skipping validation checks (skipped: %v)\n", skipChecks)
 	}
-	// Build valid checks dynamically from runtime.
-	validChecksMap := make(map[string]bool)
-	for _, r := range bootstrap.GetRulesForRuntime() {
-		validChecksMap[r.Name()] = true
-	}
-
-	// Validate skip checks against valid checks for the runtime.
-	for s := range skip {
-		if !validChecksMap[s] {
-			return fmt.Errorf("invalid skip-validation value '%s' for runtime '%s'", s, vars.RuntimeFactory.GetRuntimeType())
-		}
-	}
 
 	// Create bootstrap instance based on runtime
 	factory := bootstrap.NewBootstrapFactory(vars.RuntimeFactory.GetRuntimeType())
@@ -229,7 +217,7 @@ func buildFlagValidator() *flagvalidator.FlagValidator {
 
 	// Register common flags with their validation functions
 	builder.
-		AddCommonFlag(appFlags.Create.SkipValidation, nil).
+		AddCommonFlag(appFlags.Create.SkipValidation, validateSkipChecksFlag).
 		AddCommonFlag(appFlags.Create.Template, validateTemplateFlag).
 		AddCommonFlag(appFlags.Create.Params, validateParamsFlag).
 		AddCommonFlag(appFlags.Create.Values, validateValuesFlag)
@@ -297,6 +285,28 @@ func validateImagePullPolicyFlag(cmd *cobra.Command) error {
 			"invalid value %q: must be one of %q, %q, %q",
 			image.ImagePullPolicy(rawArgImagePullPolicy), image.PullAlways, image.PullNever, image.PullIfNotPresent,
 		)
+	}
+
+	return nil
+}
+
+// validateSkipChecksFlag validates the skipChecks flag for the current runtime.
+func validateSkipChecksFlag(cmd *cobra.Command) error {
+	if len(skipChecks) == 0 {
+		return nil
+	}
+
+	// Build valid checks dynamically from runtime
+	validChecks := make(map[string]bool, len(bootstrap.GetRulesForRuntime()))
+	for _, r := range bootstrap.GetRulesForRuntime() {
+		validChecks[r.Name()] = true
+	}
+
+	// Validate each skip check
+	for _, s := range skipChecks {
+		if !validChecks[s] {
+			return fmt.Errorf("invalid skip-validation value '%s' for runtime '%s'", s, vars.RuntimeFactory.GetRuntimeType())
+		}
 	}
 
 	return nil

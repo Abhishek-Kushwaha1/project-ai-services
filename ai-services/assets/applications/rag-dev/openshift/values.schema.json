@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
-  "title": "Application Values Schema",
   "type": "object",
   "properties": {
     "opensearch": {
@@ -8,17 +7,13 @@
       "properties": {
         "memoryLimit": {
           "type": "string",
-          "pattern": "^[0-9]+(Ki|Mi|Gi)$",
-          "description": "Memory limit for OpenSearch."
+          "pattern": "^[0-9]+(Ki|Mi|Gi|Ti|Pi|Ei)$"
         },
         "storage": {
           "type": "string",
-          "pattern": "^[0-9]+(Ki|Mi|Gi)$",
-          "description": "Storage size for OpenSearch."
+          "pattern": "^[0-9]+(Ki|Mi|Gi|Ti|Pi|Ei)$"
         }
-      },
-      "required": ["memoryLimit", "storage"]
+      }
     }
-  },
-  "required": ["opensearch"]
+  }
 }

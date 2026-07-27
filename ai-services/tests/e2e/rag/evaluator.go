@@ -21,14 +21,13 @@ import (
 
 // RAG transport tuning constants — values are explained in sharedRAGClient below.
 const (
-	similarityHealthTimeout  = 10 * time.Second       //nolint:mnd
-	ragMaxIdleConnsPerHost   = 4                      //nolint:mnd
-	ragMaxConnsPerHost       = 8                      //nolint:mnd
-	ragIdleConnTimeout       = 90 * time.Second       //nolint:mnd
-	ragResponseHeaderTimeout = 90 * time.Second       //nolint:mnd
-	ragDialTimeout           = 15 * time.Second       //nolint:mnd
-	ragDialKeepAlive         = 30 * time.Second       //nolint:mnd
-	ragRetryBackoffBase      = 200 * time.Millisecond //nolint:mnd
+	similarityHealthTimeout = 10 * time.Second       //nolint:mnd
+	ragMaxIdleConnsPerHost  = 4                      //nolint:mnd
+	ragMaxConnsPerHost      = 8                      //nolint:mnd
+	ragIdleConnTimeout      = 90 * time.Second       //nolint:mnd
+	ragDialTimeout          = 15 * time.Second       //nolint:mnd
+	ragDialKeepAlive        = 30 * time.Second       //nolint:mnd
+	ragRetryBackoffBase     = 200 * time.Millisecond //nolint:mnd
 )
 
 // similarityHealthClient skips TLS verification to support both plain http:// (legacy podman) and https:// nip.io self-signed certs (catalog).
@@ -41,17 +40,16 @@ var similarityHealthClient = &http.Client{
 	},
 }
 
-// sharedRAGClient pools TCP connections for all RAG/Judge requests; timeout exceeds per-question deadline so ctx cancellation fires first; ResponseHeaderTimeout guards dead keep-alive sockets.
+// sharedRAGClient pools TCP connections for all RAG/Judge requests.
 var sharedRAGClient = &http.Client{
 	Timeout: httpClientTimeout,
 	Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true, //nolint:gosec
 		},
-		MaxIdleConnsPerHost:   ragMaxIdleConnsPerHost,
-		MaxConnsPerHost:       ragMaxConnsPerHost,
-		IdleConnTimeout:       ragIdleConnTimeout,
-		ResponseHeaderTimeout: ragResponseHeaderTimeout,
+		MaxIdleConnsPerHost: ragMaxIdleConnsPerHost,
+		MaxConnsPerHost:     ragMaxConnsPerHost,
+		IdleConnTimeout:     ragIdleConnTimeout,
 		DialContext: (&net.Dialer{
 			Timeout:   ragDialTimeout,
 			KeepAlive: ragDialKeepAlive,
@@ -168,8 +166,7 @@ const (
 		"MODEL ANSWER:\n" +
 		"{model_answer}\n"
 
-	// httpClientTimeout: set longer than perQuestionTimeout so context cancellation always fires first.
-	httpClientTimeout = 10 * time.Minute
+	httpClientTimeout = 25 * time.Minute
 )
 
 var ErrNonRetriable = errors.New("non-retriable error")

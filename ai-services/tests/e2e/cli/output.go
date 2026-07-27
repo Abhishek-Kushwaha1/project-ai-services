@@ -350,13 +350,10 @@ func ValidateApplicationInfo(output, appName, templateName string) error {
 	}
 
 	if templateName == "rag" {
-		// Each string appears in both the running (URL) and stopped (pod-hint) branches
-		// of info.md, so the check passes regardless of pod health at call time.
 		required = append(required,
-			"chat-bot",
-			"digitize-ui",
-			"digitize-backend",
-			"summarize-api",
+			"Question and answer", // chat service display name
+			"Digitize documents",  // digitize service display name
+			"Find similar items",  // similarity service display name
 		)
 	}
 
@@ -701,6 +698,8 @@ func ValidateCatalogDbMigrateHelpOutput(output string) error {
 	}
 
 	return checkRequiredStrings(output, "catalog dbmigrate help", required)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Bootstrap failure validators
 //

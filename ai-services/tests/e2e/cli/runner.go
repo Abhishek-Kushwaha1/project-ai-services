@@ -430,6 +430,18 @@ func ExtractCatalogDigitizeURL(infoOutput string) string {
 	return extractURLBySubstring(infoOutput, svcDigitizeBackend)
 }
 
+// ExtractDigitizeURL returns the digitize-backend URL from 'application info' output.
+func ExtractDigitizeURL(infoOutput string) string {
+	if u := ExtractCatalogDigitizeURL(infoOutput); u != "" {
+		return u
+	}
+	if urls := ExtractURLsFromOutput(infoOutput); len(urls) > 0 {
+		return strings.Replace(urls[0], "ui", "digitize-api", 1)
+	}
+
+	return ""
+}
+
 // ExtractSimilarityAPIURL extracts the similarity-api URL from 'application info' output.
 // Falls back to legacy plain-HTTP extraction for non-catalog podman environments.
 func ExtractSimilarityAPIURL(infoOutput string) string {

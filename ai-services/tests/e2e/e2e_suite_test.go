@@ -440,6 +440,13 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			if appRuntime != "podman" {
 				ginkgo.Skip("catalog whoami only supported for podman runtime")
 			}
+			if catalogBackendURL == "" {
+				ginkgo.Skip("catalogBackendURL not set — skipping catalog whoami test")
+			}
+			_, _, catalogPassword := bootstrap.GetCatalogCreds()
+			if catalogPassword == "" {
+				ginkgo.Skip("CATALOG_PASSWORD not set — skipping catalog whoami test")
+			}
 			ctx, cancel := withTimeout(1 * time.Minute)
 			defer cancel()
 			output, err := cli.CatalogWhoami(ctx, cfg, appRuntime)

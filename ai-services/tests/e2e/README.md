@@ -14,7 +14,6 @@ minimum number of Spyre cards installed, amongst other pre-flight checks.
 - Podman (preferred runtime) — the suite checks for Podman and may install or skip some tests when Podman is not available. See `tests/e2e/bootstrap` for details.
 - Set the required environment variables before running the suite.
 - The golden dataset CSV file must be placed inside the `project-ai-services/test/golden/` directory. The filename should match the value provided in the `GOLDEN_DATASET_FILE` environment variable.
-- For Podman-based runs, authenticate first with `podman login` so the runtime can pull required images. The suite expects Podman auth to already exist and catalog bootstrap can fail if the auth file is missing.
 - Ginkgo CLI — tests can be run with `go test` or `ginkgo`.
 
 ## How to run tests locally
@@ -73,21 +72,12 @@ export REGISTRY_URL="icr.io"
 export REGISTRY_USER_NAME=myuser
 export REGISTRY_PASSWORD=mypassword
 
-# Red Hat registry credentials used to pull the LLM judge image
+# Red Hat registry credentials used to pull vLLM and the LLM judge image
 export RH_REGISTRY_URL="registry.redhat.io"
 export RH_REGISTRY_USER_NAME=<your redhat acc username>
 export RH_REGISTRY_PASSWORD=<your redhat acc password>
 export LLM_JUDGE_IMAGE="registry.io/example/vllm-judge:latest"
 export LLM_CONTAINER_POLLING_INTERVAL=30s
-
-# Exposed ports discovered by the suite
-export RAG_BACKEND_PORT=5100
-export RAG_UI_PORT=3100
-export DIGITIZE_PORT=4100
-export DIGITIZE_UI_PORT=7100
-export SUMMARIZE_PORT=6100
-export SIMILARITY_PORT=9100
-export LLM_JUDGE_PORT=8000
 
 # Golden dataset validation inputs
 export GOLDEN_DATASET_FILE="filename.csv"
@@ -103,7 +93,7 @@ export CREATE_PARAMS="reranker.vllm-cpu=true"   # use this for a 4-Spyre-card se
 # Catalog setup used by bootstrap and catalog login tests
 export CATALOG_USERNAME="admin"
 export CATALOG_PASSWORD=<your-catalog-admin-password>
-export CATALOG_INSECURE=true           # set false only if using valid TLS certs
+export CATALOG_INSECURE=true
 ```
 
 ## Common E2E labels
@@ -136,11 +126,10 @@ This mode is useful when:
 - The golden dataset CSV file must be placed inside the `project-ai-services/test/golden/` directory. The filename should match the value provided in the `GOLDEN_DATASET_FILE` environment variable.
 - The following environment variables must be set
 
-```
+```bash
 export GOLDEN_DATASET_FILE="filename.csv"
 
 export RAG_ACCURACY_THRESHOLD=0.70
-export RAG_BACKEND_PORT=5100
 
 export RH_REGISTRY_URL="registry.redhat.io"
 export RH_REGISTRY_USER_NAME=<your redhat acc username>
@@ -149,7 +138,6 @@ export RH_REGISTRY_PASSWORD=<your redhat acc password>
 export LLM_JUDGE_IMAGE="registry.io/example/vllm-judge:latest"
 export LLM_JUDGE_MODEL_PATH="/var/lib/ai-services/models/"
 export LLM_JUDGE_MODEL="Qwen/Qwen2.5-7B-Instruct"
-export LLM_JUDGE_PORT=8000
 export LLM_CONTAINER_POLLING_INTERVAL=30s
 ```
 
@@ -182,14 +170,9 @@ The Digitization API tests can be executed independently from the full E2E lifec
 
 ## Prerequisites
 
-- A RAG application with digitize enabled must already be running.
+- A RAG application with digitize service must already be running.
 - The application must be healthy.
-- The application must expose an accessible digitize endpoint.
-- The following environment variable must be set:
-
-```bash
-export DIGITIZE_PORT=4100
-```
+- The digitize service FQDN can be obtained from `ai-services application info <app-name> --runtime <runtime>`.
 
 - Verify the application exists:
 
@@ -217,14 +200,10 @@ The Similarity API tests validate the `similarity-api` service after the applica
 
 ## Prerequisites
 
-- A RAG application with similarity enabled must already be running.
+- A RAG application with similarity service must already be running.
 - The application must be healthy.
 - Document ingestion or digitization ingestion must be possible so the similarity index contains test data.
-- The following environment variable is typically required:
-
-```bash
-export SIMILARITY_PORT=9100
-```
+- The similarity service FQDN can be obtained from `ai-services application info <app-name> --runtime <runtime>`.
 
 ## Command to Run Similarity API Tests Only
 

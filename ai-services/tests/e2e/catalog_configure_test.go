@@ -3,7 +3,6 @@ package e2e
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +19,7 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/tests/e2e/bootstrap"
 	"github.com/project-ai-services/ai-services/tests/e2e/cli"
+	"github.com/project-ai-services/ai-services/tests/e2e/common"
 )
 
 const catalogConfigureTestTimeout = 15 * time.Minute
@@ -39,25 +39,21 @@ func skipIfNoCatalogPassword() {
 	}
 }
 
-// catalogHTTPClient returns an HTTPS client that skips certificate verification (self-signed / nip.io certs in e2e).
-func catalogHTTPClient() *http.Client {
-	return &http.Client{
-
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
-		},
+// catalogDoRequest performs an authenticated HTTP request against the catalog API.
+// It delegates client construction and body draining to common utilities, adding
+// only the catalog-specific Authorization header on top.
+func catalogDoRequest(ctx context.Context, method, url, token string, body []byte) ([]byte, int, error) {
+	cfg := common.HTTPClientConfig{
+		Timeout:            15 * time.Second,
+		InsecureSkipVerify: true,
 	}
-}
 
-// catalogDoRequest performs an authenticated HTTP request and returns body, status, and error.
-func catalogDoRequest(method, url, token string, body []byte) ([]byte, int, error) {
-	var reqBody io.Reader
+	var buf *bytes.Buffer
 	if len(body) > 0 {
-		reqBody = bytes.NewReader(body)
+		buf = bytes.NewBuffer(body)
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), method, url, reqBody) //nolint:noctx
+	req, err := http.NewRequestWithContext(ctx, method, url, buf)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -67,11 +63,11 @@ func catalogDoRequest(method, url, token string, body []byte) ([]byte, int, erro
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	resp, err := catalogHTTPClient().Do(req)
+	resp, err := common.GetHTTPClient(cfg).Do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer common.DrainAndClose(resp.Body)
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -82,9 +78,9 @@ func catalogDoRequest(method, url, token string, body []byte) ([]byte, int, erro
 }
 
 // catalogGetToken obtains a JWT token from the catalog login endpoint.
-func catalogGetToken(serverURL, username, password string) (string, error) {
+func catalogGetToken(ctx context.Context, serverURL, username, password string) (string, error) {
 	payload, _ := json.Marshal(map[string]string{"username": username, "password": password})
-	body, status, err := catalogDoRequest(http.MethodPost, serverURL+"/api/v1/auth/login", "", payload)
+	body, status, err := catalogDoRequest(ctx, http.MethodPost, serverURL+"/api/v1/auth/login", "", payload)
 	if err != nil {
 		return "", err
 	}
@@ -200,14 +196,14 @@ func nonRootCatalogRun(testID string, ctx context.Context, extraArgs ...string) 
 }
 
 // chatEndpointExpectNoError POSTs payload to the chat endpoint and asserts the response is not 5xx.
-func chatEndpointExpectNoError(testID, backendURL, appName, token string, payload map[string]interface{}) {
+func chatEndpointExpectNoError(ctx context.Context, testID, backendURL, appName, token string, payload map[string]interface{}) {
 	if appName == "" {
 		ginkgo.Skip(fmt.Sprintf("[%s] no application name — skipping chat endpoint test", testID))
 	}
 	url := backendURL + fmt.Sprintf("/api/v1/applications/%s/chat", appName)
 	body, _ := json.Marshal(payload)
 	logger.Infof("[TEST][%s] POST %s", testID, url)
-	_, status, err := catalogDoRequest(http.MethodPost, url, token, body)
+	_, status, err := catalogDoRequest(ctx, http.MethodPost, url, token, body)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(status).To(
 		gomega.BeNumerically("<", http.StatusInternalServerError),
@@ -955,7 +951,9 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					}
 
 					var tokenErr error
-					authToken, tokenErr = catalogGetToken(endpointBackendURL, catalogUsername, catalogPassword)
+					tokenCtx, tokenCancel := context.WithTimeout(context.Background(), catalogConfigureShortTimeout)
+					defer tokenCancel()
+					authToken, tokenErr = catalogGetToken(tokenCtx, endpointBackendURL, catalogUsername, catalogPassword)
 					if tokenErr != nil {
 						ginkgo.Skip(fmt.Sprintf("could not obtain catalog auth token: %v — skipping endpoint tests", tokenErr))
 					}
@@ -970,7 +968,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					func() {
 						url := endpointBackendURL + "/api/v1/catalog/prompt-params"
 						logger.Infof("[TEST][T318500136] GET %s", url)
-						_, status, err := catalogDoRequest(http.MethodGet, url, authToken, nil)
+						_, status, err := catalogDoRequest(context.Background(), http.MethodGet, url, authToken, nil)
 						gomega.Expect(err).NotTo(gomega.HaveOccurred())
 						gomega.Expect(status).To(
 							gomega.SatisfyAny(gomega.Equal(http.StatusOK), gomega.Equal(http.StatusNotFound)),
@@ -989,7 +987,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 						}
 						url := endpointBackendURL + "/api/v1/applications"
 						logger.Infof("[TEST][T318500138] GET %s", url)
-						body, status, err := catalogDoRequest(http.MethodGet, url, authToken, nil)
+						body, status, err := catalogDoRequest(context.Background(), http.MethodGet, url, authToken, nil)
 						gomega.Expect(err).NotTo(gomega.HaveOccurred())
 						gomega.Expect(status).To(gomega.Equal(http.StatusOK),
 							"applications list should return 200; body: %s", string(body))
@@ -1001,7 +999,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					"[T318500139] catalog applications endpoint handles a watsonx-flavored payload",
 					ginkgo.Label("catalog-configure", "endpoints", "spyre-dependent"),
 					func() {
-						chatEndpointExpectNoError("T318500139", endpointBackendURL, testAppName, authToken, map[string]interface{}{
+						chatEndpointExpectNoError(context.Background(), "T318500139", endpointBackendURL, testAppName, authToken, map[string]interface{}{
 							"messages": []map[string]string{{"role": "user", "content": "Hello from watsonx test"}},
 							"model":    "ibm/granite-3-2b-instruct",
 						})
@@ -1012,7 +1010,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					"[T318500140] catalog applications endpoint handles a vllm-key-flavored payload",
 					ginkgo.Label("catalog-configure", "endpoints", "spyre-dependent"),
 					func() {
-						chatEndpointExpectNoError("T318500140", endpointBackendURL, testAppName, authToken, map[string]interface{}{
+						chatEndpointExpectNoError(context.Background(), "T318500140", endpointBackendURL, testAppName, authToken, map[string]interface{}{
 							"messages":   []map[string]string{{"role": "user", "content": "Hello from vllm test"}},
 							"model":      "vllm-local",
 							"extra_body": map[string]string{"api_key": "test-vllm-key"},
@@ -1024,7 +1022,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					"[T318500141] catalog application endpoint accepts a system prompt in the payload",
 					ginkgo.Label("catalog-configure", "endpoints", "spyre-dependent"),
 					func() {
-						chatEndpointExpectNoError("T318500141", endpointBackendURL, testAppName, authToken, map[string]interface{}{
+						chatEndpointExpectNoError(context.Background(), "T318500141", endpointBackendURL, testAppName, authToken, map[string]interface{}{
 							"messages": []map[string]string{
 								{"role": "system", "content": "You are a helpful assistant."},
 								{"role": "user", "content": "Hello"},
@@ -1045,14 +1043,14 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 						loginURL := endpointBackendURL + "/api/v1/auth/login"
 						loginPayload, _ := json.Marshal(map[string]string{"username": catalogUsername, "password": catalogPassword})
 						logger.Infof("[TEST][T318500142] POST %s (valid creds)", loginURL)
-						loginBody, loginStatus, loginErr := catalogDoRequest(http.MethodPost, loginURL, "", loginPayload)
+						loginBody, loginStatus, loginErr := catalogDoRequest(context.Background(), http.MethodPost, loginURL, "", loginPayload)
 						gomega.Expect(loginErr).NotTo(gomega.HaveOccurred())
 						gomega.Expect(loginStatus).To(gomega.Equal(http.StatusOK),
 							"valid login must return 200; body: %s", string(loginBody))
 
 						badPayload, _ := json.Marshal(map[string]string{"username": catalogUsername, "password": "definitely-wrong-password-e2e"})
 						logger.Infof("[TEST][T318500142] POST %s (invalid creds)", loginURL)
-						_, badStatus, badErr := catalogDoRequest(http.MethodPost, loginURL, "", badPayload)
+						_, badStatus, badErr := catalogDoRequest(context.Background(), http.MethodPost, loginURL, "", badPayload)
 						gomega.Expect(badErr).NotTo(gomega.HaveOccurred())
 						gomega.Expect(badStatus).To(
 							gomega.SatisfyAny(gomega.Equal(http.StatusUnauthorized), gomega.Equal(http.StatusForbidden)),
@@ -1068,7 +1066,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					func() {
 						listURL := endpointBackendURL + "/api/v1/applications"
 						logger.Infof("[TEST][T318500143] GET %s", listURL)
-						body, status, err := catalogDoRequest(http.MethodGet, listURL, authToken, nil)
+						body, status, err := catalogDoRequest(context.Background(), http.MethodGet, listURL, authToken, nil)
 						gomega.Expect(err).NotTo(gomega.HaveOccurred())
 						gomega.Expect(status).To(gomega.Equal(http.StatusOK),
 							"application list must return 200; body: %s", string(body))
@@ -1092,7 +1090,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 						for _, ep := range endpoints {
 							url := endpointBackendURL + ep.path
 							logger.Infof("[TEST][T318500144] %s %s", ep.method, url)
-							_, status, err := catalogDoRequest(ep.method, url, authToken, nil)
+							_, status, err := catalogDoRequest(context.Background(), ep.method, url, authToken, nil)
 							gomega.Expect(err).NotTo(gomega.HaveOccurred(),
 								"request to %s must not error", url)
 							gomega.Expect(status).To(

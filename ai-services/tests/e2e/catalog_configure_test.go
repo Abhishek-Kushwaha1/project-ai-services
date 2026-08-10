@@ -104,57 +104,57 @@ func catalogGetToken(ctx context.Context, serverURL, username, password string) 
 var catalogConfigureBackendURL string
 
 // catalogUninstallIfRunning stops the catalog if running; no-op if already stopped.
-func catalogUninstallIfRunning(testID string) {
+func catalogUninstallIfRunning() {
 	infoCtx, infoCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer infoCancel()
 
 	if _, err := cli.CatalogInfo(infoCtx, cfg, appRuntime); err != nil {
-		logger.Infof("[TEST][%s] catalog not running — skipping pre-test uninstall", testID)
+		logger.Infof("[TEST] catalog not running — skipping pre-test uninstall")
 		return
 	}
 
 	uninstallCtx, uninstallCancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 	defer uninstallCancel()
 
-	logger.Infof("[TEST][%s] uninstalling catalog before test", testID)
+	logger.Infof("[TEST] uninstalling catalog before test")
 	out, uErr := cli.CatalogUninstall(uninstallCtx, cfg, appRuntime)
 	if uErr != nil {
-		logger.Warningf("[TEST][%s] pre-test uninstall warning: %v\n%s", testID, uErr, out)
+		logger.Warningf("[TEST] pre-test uninstall warning: %v\n%s", uErr, out)
 	} else {
-		logger.Infof("[TEST][%s] catalog uninstalled successfully", testID)
+		logger.Infof("[TEST] catalog uninstalled successfully")
 	}
 }
 
 // catalogRestoreDefault redeploys catalog with default settings; no-op if already running. Intended for defer.
-func catalogRestoreDefault(testID string) {
+func catalogRestoreDefault() {
 	infoCtx, infoCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer infoCancel()
 
 	if _, err := cli.CatalogInfo(infoCtx, cfg, appRuntime); err == nil {
-		logger.Infof("[TEST][%s] catalog already running — no restore needed", testID)
+		logger.Infof("[TEST] catalog already running — no restore needed")
 		return
 	}
 
 	restoreCtx, restoreCancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 	defer restoreCancel()
 
-	logger.Infof("[TEST][%s] restoring default catalog after test", testID)
+	logger.Infof("[TEST] restoring default catalog after test")
 	out, rErr := cli.CatalogConfigure(restoreCtx, cfg, appRuntime)
 	if rErr != nil {
-		logger.Warningf("[TEST][%s] catalog restore warning: %v\n%s", testID, rErr, out)
+		logger.Warningf("[TEST] catalog restore warning: %v\n%s", rErr, out)
 	} else {
-		logger.Infof("[TEST][%s] catalog restored successfully", testID)
+		logger.Infof("[TEST] catalog restored successfully")
 	}
 }
 
 // nonRootHomeDir resolves the home directory for the non-root user; skips the spec if resolution fails.
-func nonRootHomeDir(testID string) string {
+func nonRootHomeDir() string {
 	currentUser, userErr := user.Current()
 	gomega.Expect(userErr).NotTo(gomega.HaveOccurred())
 
 	nonRootUsername := os.Getenv("NONROOT_USER")
 	if currentUser.Uid == "0" && nonRootUsername == "" {
-		ginkgo.Skip(fmt.Sprintf("[%s] running as root and NONROOT_USER not set — skipping non-root user test", testID))
+		ginkgo.Skip("running as root and NONROOT_USER not set — skipping non-root user test")
 	}
 
 	if currentUser.Uid != "0" {
@@ -163,20 +163,20 @@ func nonRootHomeDir(testID string) string {
 
 	targetUser, lookupErr := user.Lookup(nonRootUsername)
 	if lookupErr != nil {
-		ginkgo.Skip(fmt.Sprintf("[%s] NONROOT_USER=%q not found: %v", testID, nonRootUsername, lookupErr))
+		ginkgo.Skip(fmt.Sprintf("NONROOT_USER=%q not found: %v", nonRootUsername, lookupErr))
 	}
 	return targetUser.HomeDir
 }
 
 // nonRootCatalogRun runs catalog configure as a non-root user, delegating via sudo when running as root.
 // Returns (output, error). Skips the spec if the non-root user cannot be resolved.
-func nonRootCatalogRun(testID string, ctx context.Context, extraArgs ...string) (string, error) {
+func nonRootCatalogRun(ctx context.Context, extraArgs ...string) (string, error) {
 	currentUser, userErr := user.Current()
 	gomega.Expect(userErr).NotTo(gomega.HaveOccurred())
 
 	nonRootUsername := os.Getenv("NONROOT_USER")
 	if currentUser.Uid == "0" && nonRootUsername == "" {
-		ginkgo.Skip(fmt.Sprintf("[%s] running as root and NONROOT_USER not set — skipping non-root user test", testID))
+		ginkgo.Skip("running as root and NONROOT_USER not set — skipping non-root user test")
 	}
 
 	if currentUser.Uid != "0" {
@@ -188,7 +188,7 @@ func nonRootCatalogRun(testID string, ctx context.Context, extraArgs ...string) 
 	// Running as root — delegate to the non-root user via sudo.
 	password := bootstrap.GetCatalogAdminPassword()
 	sudoArgs := append([]string{"-u", nonRootUsername, cfg.AIServiceBin, "catalog", "configure", "--runtime", appRuntime}, extraArgs...)
-	logger.Infof("[TEST][%s] delegating to non-root user %q via sudo", testID, nonRootUsername)
+	logger.Infof("[TEST] delegating to non-root user %q via sudo", nonRootUsername)
 	cmd := exec.CommandContext(ctx, "sudo", sudoArgs...)
 	cmd.Stdin = strings.NewReader(password + "\n" + password + "\n")
 	out, err := cmd.CombinedOutput()
@@ -196,20 +196,20 @@ func nonRootCatalogRun(testID string, ctx context.Context, extraArgs ...string) 
 }
 
 // chatEndpointExpectNoError POSTs payload to the chat endpoint and asserts the response is not 5xx.
-func chatEndpointExpectNoError(ctx context.Context, testID, backendURL, appName, token string, payload map[string]interface{}) {
+func chatEndpointExpectNoError(ctx context.Context, backendURL, appName, token string, payload map[string]interface{}) {
 	if appName == "" {
-		ginkgo.Skip(fmt.Sprintf("[%s] no application name — skipping chat endpoint test", testID))
+		ginkgo.Skip("no application name — skipping chat endpoint test")
 	}
 	url := backendURL + fmt.Sprintf("/api/v1/applications/%s/chat", appName)
 	body, _ := json.Marshal(payload)
-	logger.Infof("[TEST][%s] POST %s", testID, url)
+	logger.Infof("[TEST] POST %s", url)
 	_, status, err := catalogDoRequest(ctx, http.MethodPost, url, token, body)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(status).To(
 		gomega.BeNumerically("<", http.StatusInternalServerError),
 		"chat endpoint must not return 5xx; got %d", status,
 	)
-	logger.Infof("[TEST][%s] chat endpoint returned HTTP %d", testID, status)
+	logger.Infof("[TEST] chat endpoint returned HTTP %d", status)
 }
 
 var _ = ginkgo.Describe("Catalog Configure Tests",
@@ -283,7 +283,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 
 		ginkgo.Context("Custom Path Configuration", func() {
 			ginkgo.It(
-				"[T318500130] configures catalog successfully with a custom --basedir path",
+				"configures catalog successfully with a custom --basedir path",
 				ginkgo.Label("catalog-configure", "custom-path", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
@@ -293,27 +293,27 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
 					defer func() {
 						if rerr := os.RemoveAll(customDir); rerr != nil {
-							logger.Warningf("[TEST][T318500130] cleanup warning: %v", rerr)
+							logger.Warningf("[TEST] cleanup warning: %v", rerr)
 						}
 					}()
 
-					catalogUninstallIfRunning("T318500130")
-					defer catalogRestoreDefault("T318500130")
+					catalogUninstallIfRunning()
+					defer catalogRestoreDefault()
 
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500130] running catalog configure --basedir %s", customDir)
+					logger.Infof("[TEST] running catalog configure --basedir %s", customDir)
 					output, err := cli.CatalogConfigureWithBasedir(ctx, cfg, customDir, appRuntime)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred(),
 						"catalog configure --basedir should succeed; output:\n%s", output)
 					gomega.Expect(cli.ValidateCatalogCustomPathOutput(output)).To(gomega.Succeed())
-					logger.Infof("[TEST][T318500130] catalog configure with custom path succeeded")
+					logger.Infof("[TEST] catalog configure with custom path succeeded")
 				},
 			)
 
 			ginkgo.It(
-				"[T318500131] resolves a relative --basedir path to an absolute path",
+				"resolves a relative --basedir path to an absolute path",
 				ginkgo.Label("catalog-configure", "custom-path", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
@@ -323,27 +323,27 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
 					defer func() {
 						if rerr := os.RemoveAll(absDir); rerr != nil {
-							logger.Warningf("[TEST][T318500131] cleanup warning: %v", rerr)
+							logger.Warningf("[TEST] cleanup warning: %v", rerr)
 						}
 					}()
 
-					catalogUninstallIfRunning("T318500131")
-					defer catalogRestoreDefault("T318500131")
+					catalogUninstallIfRunning()
+					defer catalogRestoreDefault()
 
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500131] running catalog configure with resolved path %s", absDir)
+					logger.Infof("[TEST] running catalog configure with resolved path %s", absDir)
 					output, err := cli.CatalogConfigureWithBasedir(ctx, cfg, absDir, appRuntime)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred(),
 						"catalog configure should resolve path; output:\n%s", output)
 					gomega.Expect(cli.ValidateCatalogCustomPathOutput(output)).To(gomega.Succeed())
-					logger.Infof("[TEST][T318500131] relative/absolute path resolution validated")
+					logger.Infof("[TEST] relative/absolute path resolution validated")
 				},
 			)
 
 			ginkgo.It(
-				"[T318500132] rejects a --basedir path that does not exist or is not writable",
+				"rejects a --basedir path that does not exist or is not writable",
 				ginkgo.Label("catalog-configure", "custom-path", "negative", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
@@ -354,14 +354,14 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureShortTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500132] running catalog configure with non-existent path %s", nonExistentPath)
+					logger.Infof("[TEST] running catalog configure with non-existent path %s", nonExistentPath)
 					output, err := cli.CatalogConfigureWithBasedir(ctx, cfg, nonExistentPath, appRuntime)
 					gomega.Expect(err).To(gomega.HaveOccurred(),
 						"catalog configure with a non-existent path should fail; output:\n%s", output)
 					gomega.Expect(
 						cli.ValidateCatalogInvalidFlagCombinationOutput(output + err.Error()),
 					).To(gomega.Succeed())
-					logger.Infof("[TEST][T318500132] early permission validation confirmed: %v", err)
+					logger.Infof("[TEST] early permission validation confirmed: %v", err)
 				},
 			)
 		})
@@ -370,7 +370,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 
 		ginkgo.Context("Catalog Uninstall", func() {
 			ginkgo.It(
-				"[T318500135] catalog uninstall executes successfully on a running catalog",
+				"catalog uninstall executes successfully on a running catalog",
 				ginkgo.Label("catalog-configure", "uninstall", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
@@ -381,10 +381,10 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 
 					infoOut, infoErr := cli.CatalogInfo(infoCtx, cfg, appRuntime)
 					if infoErr != nil {
-						ginkgo.Skip("[T318500135] catalog not running — skipping uninstall test")
+						ginkgo.Skip("catalog not running — skipping uninstall test")
 					}
 					if cli.ExtractCatalogBackendURL(infoOut) == "" {
-						ginkgo.Skip("[T318500135] catalog URL not found — skipping uninstall test")
+						ginkgo.Skip("catalog URL not found — skipping uninstall test")
 					}
 
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
@@ -393,26 +393,26 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					defer func() {
 						restoreCtx, restoreCancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 						defer restoreCancel()
-						logger.Infof("[TEST][T318500135] restoring catalog after uninstall")
+						logger.Infof("[TEST] restoring catalog after uninstall")
 						restoreOut, restoreErr := cli.CatalogConfigure(restoreCtx, cfg, appRuntime)
 						if restoreErr != nil {
-							logger.Warningf("[TEST][T318500135] catalog restore warning: %v\n%s", restoreErr, restoreOut)
+							logger.Warningf("[TEST] catalog restore warning: %v\n%s", restoreErr, restoreOut)
 						} else {
-							logger.Infof("[TEST][T318500135] catalog restored after uninstall")
+							logger.Infof("[TEST] catalog restored after uninstall")
 						}
 					}()
 
-					logger.Infof("[TEST][T318500135] running catalog uninstall")
+					logger.Infof("[TEST] running catalog uninstall")
 					output, err := cli.CatalogUninstall(ctx, cfg, appRuntime)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred(),
 						"catalog uninstall should succeed; output:\n%s", output)
 					gomega.Expect(cli.ValidateCatalogUninstallOutput(output)).To(gomega.Succeed())
-					logger.Infof("[TEST][T318500135] catalog uninstall succeeded")
+					logger.Infof("[TEST] catalog uninstall succeeded")
 				},
 			)
 
 			ginkgo.It(
-				"[T318500156] catalog uninstall succeeds after deployment with a custom --basedir",
+				"catalog uninstall succeeds after deployment with a custom --basedir",
 				ginkgo.Label("catalog-configure", "custom-path", "uninstall", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
@@ -422,17 +422,17 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
 					defer func() {
 						if rerr := os.RemoveAll(customDir); rerr != nil {
-							logger.Warningf("[TEST][T318500156] cleanup warning: %v", rerr)
+							logger.Warningf("[TEST] cleanup warning: %v", rerr)
 						}
 					}()
 
-					catalogUninstallIfRunning("T318500156")
-					defer catalogRestoreDefault("T318500156")
+					catalogUninstallIfRunning()
+					defer catalogRestoreDefault()
 
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500156] deploying catalog with custom basedir %s", customDir)
+					logger.Infof("[TEST] deploying catalog with custom basedir %s", customDir)
 					configOut, configErr := cli.CatalogConfigureWithBasedir(ctx, cfg, customDir, appRuntime)
 					gomega.Expect(configErr).NotTo(gomega.HaveOccurred(),
 						"configure with custom basedir should succeed; output:\n%s", configOut)
@@ -441,12 +441,12 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					uninstallCtx, uninstallCancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 					defer uninstallCancel()
 
-					logger.Infof("[TEST][T318500156] running catalog uninstall after custom-path deploy")
+					logger.Infof("[TEST] running catalog uninstall after custom-path deploy")
 					uninstallOut, uninstallErr := cli.CatalogUninstall(uninstallCtx, cfg, appRuntime)
 					gomega.Expect(uninstallErr).NotTo(gomega.HaveOccurred(),
 						"catalog uninstall after custom-path deploy should succeed; output:\n%s", uninstallOut)
 					gomega.Expect(cli.ValidateCatalogUninstallCustomPathOutput(uninstallOut)).To(gomega.Succeed())
-					logger.Infof("[TEST][T318500156] catalog uninstall after custom-path deploy succeeded")
+					logger.Infof("[TEST] catalog uninstall after custom-path deploy succeeded")
 				},
 			)
 		})
@@ -455,7 +455,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 
 		ginkgo.Context("Configure Idempotency", func() {
 			ginkgo.It(
-				"[T318500158] re-running catalog configure is idempotent and creates no duplicate resources",
+				"re-running catalog configure is idempotent and creates no duplicate resources",
 				ginkgo.Label("catalog-configure", "idempotency", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
@@ -464,7 +464,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500158] first catalog configure run")
+					logger.Infof("[TEST] first catalog configure run")
 					firstOut, firstErr := cli.CatalogConfigure(ctx, cfg, appRuntime)
 					gomega.Expect(firstErr).NotTo(gomega.HaveOccurred(),
 						"first catalog configure should succeed; output:\n%s", firstOut)
@@ -473,7 +473,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					secondCtx, secondCancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 					defer secondCancel()
 
-					logger.Infof("[TEST][T318500158] second (idempotent) catalog configure run")
+					logger.Infof("[TEST] second (idempotent) catalog configure run")
 					secondOut, secondErr := cli.CatalogConfigure(secondCtx, cfg, appRuntime)
 					gomega.Expect(secondErr).NotTo(gomega.HaveOccurred(),
 						"second catalog configure should succeed; output:\n%s", secondOut)
@@ -484,7 +484,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 						strings.Contains(secondOut, "Access the Catalog Backend at")
 					gomega.Expect(alreadyRunning).To(gomega.BeTrue(),
 						"second configure run should indicate catalog is already running; output:\n%s", secondOut)
-					logger.Infof("[TEST][T318500158] idempotent configure validated")
+					logger.Infof("[TEST] idempotent configure validated")
 				},
 			)
 		})
@@ -493,7 +493,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 
 		ginkgo.Context("SSL Certificate Configuration", func() {
 			ginkgo.It(
-				"[T318500157] deploys catalog with custom SSL certificate and key",
+				"deploys catalog with custom SSL certificate and key",
 				ginkgo.Label("catalog-configure", "ssl", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
@@ -506,24 +506,24 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					cert, err := bootstrap.GenerateSelfSignedWildcardCert(certDir, "e2etest.local")
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
-					catalogUninstallIfRunning("T318500157")
-					defer catalogRestoreDefault("T318500157")
+					catalogUninstallIfRunning()
+					defer catalogRestoreDefault()
 
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500157] running catalog configure with custom SSL cert %s", cert.CertPath)
+					logger.Infof("[TEST] running catalog configure with custom SSL cert %s", cert.CertPath)
 					output, err := cli.CatalogConfigureWithSSL(ctx, cfg, cert.CertPath, cert.KeyPath, appRuntime)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred(),
 						"catalog configure with custom SSL should succeed; output:\n%s", output)
 					gomega.Expect(cli.ValidateCatalogConfigureOutput(output)).To(gomega.Succeed())
-					logger.Infof("[TEST][T318500157] custom SSL deployment succeeded")
+					logger.Infof("[TEST] custom SSL deployment succeeded")
 				},
 			)
 
 			// Health check omitted — self-signed cert uses e2etest.local which does not resolve in CI DNS.
 			ginkgo.It(
-				"[T318500160] resets the Caddy certificate without restarting the pod",
+				"resets the Caddy certificate without restarting the pod",
 				ginkgo.Label("catalog-configure", "ssl", "reset", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
@@ -533,7 +533,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					defer infoCancel()
 
 					if _, infoErr := cli.CatalogInfo(infoCtx, cfg, appRuntime); infoErr != nil {
-						ginkgo.Skip("[T318500160] catalog not running — skipping certificate reset test")
+						ginkgo.Skip("catalog not running — skipping certificate reset test")
 					}
 
 					certDir, err := os.MkdirTemp("", "ais-catalog-reset-cert-*")
@@ -546,17 +546,17 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500160] running catalog configure --reset-certificate")
+					logger.Infof("[TEST] running catalog configure --reset-certificate")
 					output, err := cli.CatalogConfigureResetCert(ctx, cfg, cert.CertPath, cert.KeyPath, appRuntime)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred(),
 						"--reset-certificate should succeed; output:\n%s", output)
 					gomega.Expect(cli.ValidateCatalogResetCertOutput(output)).To(gomega.Succeed())
-					logger.Infof("[TEST][T318500160] certificate reset validated")
+					logger.Infof("[TEST] certificate reset validated")
 				},
 			)
 
 			ginkgo.It(
-				"[T318500163] rejects invalid flag combinations for catalog configure",
+				"rejects invalid flag combinations for catalog configure",
 				ginkgo.Label("catalog-configure", "ssl", "negative", "spyre-independent"),
 				func() {
 					skipIfNotPodman()
@@ -564,7 +564,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureShortTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500163] testing --reset-certificate without --ssl-cert/--ssl-key")
+					logger.Infof("[TEST] testing --reset-certificate without --ssl-cert/--ssl-key")
 					output, err := cli.CatalogConfigureWithArgs(ctx, cfg, appRuntime, "--reset-certificate")
 					gomega.Expect(err).To(gomega.HaveOccurred(),
 						"--reset-certificate without --ssl-cert/--ssl-key must fail; output:\n%s", output)
@@ -582,19 +582,19 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					ctx2, cancel2 := context.WithTimeout(context.Background(), catalogConfigureShortTimeout)
 					defer cancel2()
 
-					logger.Infof("[TEST][T318500163] testing --ssl-cert without --ssl-key")
+					logger.Infof("[TEST] testing --ssl-cert without --ssl-key")
 					output2, err2 := cli.CatalogConfigureWithArgs(ctx2, cfg, appRuntime, "--ssl-cert", cert.CertPath)
 					gomega.Expect(err2).To(gomega.HaveOccurred(),
 						"--ssl-cert without --ssl-key must fail; output:\n%s", output2)
 					gomega.Expect(
 						cli.ValidateCatalogInvalidFlagCombinationOutput(output2 + err2.Error()),
 					).To(gomega.Succeed())
-					logger.Infof("[TEST][T318500163] invalid flag combinations correctly rejected")
+					logger.Infof("[TEST] invalid flag combinations correctly rejected")
 				},
 			)
 
 			ginkgo.It(
-				"[T318500164] rejects a certificate whose domain does not match the configured domain",
+				"rejects a certificate whose domain does not match the configured domain",
 				ginkgo.Label("catalog-configure", "ssl", "negative", "spyre-independent"),
 				func() {
 					skipIfNotPodman()
@@ -610,7 +610,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureShortTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500164] testing cert domain mismatch")
+					logger.Infof("[TEST] testing cert domain mismatch")
 					output, err := cli.CatalogConfigureWithArgs(
 						ctx, cfg, appRuntime,
 						"--ssl-cert", cert.CertPath,
@@ -630,12 +630,12 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 						gomega.Expect(domainWarning).To(gomega.BeTrue(),
 							"expected domain-ignored warning in output; got:\n%s", output)
 					}
-					logger.Infof("[TEST][T318500164] certificate domain mismatch handling validated")
+					logger.Infof("[TEST] certificate domain mismatch handling validated")
 				},
 			)
 
 			ginkgo.It(
-				"[T318500168] rejects invalid (non-PEM) certificate content",
+				"rejects invalid (non-PEM) certificate content",
 				ginkgo.Label("catalog-configure", "ssl", "negative", "spyre-independent"),
 				func() {
 					skipIfNotPodman()
@@ -651,7 +651,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureShortTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500168] testing invalid certificate content")
+					logger.Infof("[TEST] testing invalid certificate content")
 					output, err := cli.CatalogConfigureWithArgs(
 						ctx, cfg, appRuntime,
 						"--ssl-cert", certPath,
@@ -662,13 +662,13 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					gomega.Expect(
 						cli.ValidateCatalogInvalidCertOutput(output + err.Error()),
 					).To(gomega.Succeed())
-					logger.Infof("[TEST][T318500168] invalid cert content correctly rejected: %v", err)
+					logger.Infof("[TEST] invalid cert content correctly rejected: %v", err)
 				},
 			)
 
 			// Each cycle uses the same domain (e2etest.local) — CLI rejects domain changes during --reset-certificate.
 			ginkgo.It(
-				"[T318500170] supports multiple consecutive certificate reset cycles",
+				"supports multiple consecutive certificate reset cycles",
 				ginkgo.Label("catalog-configure", "ssl", "reset", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
@@ -678,7 +678,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					defer infoCancel()
 
 					if _, infoErr := cli.CatalogInfo(infoCtx, cfg, appRuntime); infoErr != nil {
-						ginkgo.Skip("[T318500170] catalog not running — skipping multiple reset cycles test")
+						ginkgo.Skip("catalog not running — skipping multiple reset cycles test")
 					}
 
 					const (
@@ -697,7 +697,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 						cycleCtx, cycleCancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 						defer cycleCancel()
 
-						logger.Infof("[TEST][T318500170] certificate reset cycle %d/%d (domain=%s)", i, resetCycles, resetDomain)
+						logger.Infof("[TEST] certificate reset cycle %d/%d (domain=%s)", i, resetCycles, resetDomain)
 						output, err := cli.CatalogConfigureResetCert(
 							cycleCtx, cfg, cert.CertPath, cert.KeyPath, appRuntime,
 						)
@@ -705,7 +705,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 							"certificate reset cycle %d should succeed; output:\n%s", i, output)
 						gomega.Expect(cli.ValidateCatalogResetCertOutput(output)).To(gomega.Succeed())
 					}
-					logger.Infof("[TEST][T318500170] %d certificate reset cycles validated", resetCycles)
+					logger.Infof("[TEST] %d certificate reset cycles validated", resetCycles)
 				},
 			)
 		})
@@ -715,7 +715,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 		ginkgo.Context("Reset Podman Auth", func() {
 			// Health check omitted — preceding SSL test may have deployed with e2etest.local (no DNS).
 			ginkgo.It(
-				"[T318500161] resets podman auth without breaking the running catalog deployment",
+				"resets podman auth without breaking the running catalog deployment",
 				ginkgo.Label("catalog-configure", "reset", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
@@ -724,18 +724,18 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					defer infoCancel()
 
 					if _, infoErr := cli.CatalogInfo(infoCtx, cfg, appRuntime); infoErr != nil {
-						ginkgo.Skip("[T318500161] catalog not running — skipping reset-podman-auth test")
+						ginkgo.Skip("catalog not running — skipping reset-podman-auth test")
 					}
 
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500161] running catalog configure --reset-podman-auth")
+					logger.Infof("[TEST] running catalog configure --reset-podman-auth")
 					output, err := cli.CatalogConfigureResetAuth(ctx, cfg, appRuntime)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred(),
 						"--reset-podman-auth should succeed; output:\n%s", output)
 					gomega.Expect(cli.ValidateCatalogResetAuthOutput(output)).To(gomega.Succeed())
-					logger.Infof("[TEST][T318500161] --reset-podman-auth validated")
+					logger.Infof("[TEST] --reset-podman-auth validated")
 				},
 			)
 		})
@@ -744,7 +744,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 
 		ginkgo.Context("Reset Operations Without Deployment", func() {
 			ginkgo.It(
-				"[T318500171] reset flags report 'not running' when catalog is not deployed",
+				"reset flags report 'not running' when catalog is not deployed",
 				ginkgo.Label("catalog-configure", "reset", "negative", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
@@ -753,20 +753,20 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					uninstallCtx, uninstallCancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 					defer uninstallCancel()
 
-					logger.Infof("[TEST][T318500171] uninstalling catalog to create 'not deployed' state")
+					logger.Infof("[TEST] uninstalling catalog to create 'not deployed' state")
 					uninstallOut, uninstallErr := cli.CatalogUninstall(uninstallCtx, cfg, appRuntime)
 					gomega.Expect(uninstallErr).NotTo(gomega.HaveOccurred(),
-						"T318500171 pre-condition uninstall failed; output:\n%s", uninstallOut)
+						"pre-condition uninstall failed; output:\n%s", uninstallOut)
 
 					defer func() {
 						restoreCtx, restoreCancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 						defer restoreCancel()
-						logger.Infof("[TEST][T318500171] restoring catalog after test")
+						logger.Infof("[TEST] restoring catalog after test")
 						restoreOut, restoreErr := cli.CatalogConfigure(restoreCtx, cfg, appRuntime)
 						if restoreErr != nil {
-							logger.Warningf("[TEST][T318500171] catalog restore warning: %v\n%s", restoreErr, restoreOut)
+							logger.Warningf("[TEST] catalog restore warning: %v\n%s", restoreErr, restoreOut)
 						} else {
-							logger.Infof("[TEST][T318500171] catalog restored successfully")
+							logger.Infof("[TEST] catalog restored successfully")
 						}
 					}()
 
@@ -795,7 +795,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					authCtx, authCancel := context.WithTimeout(context.Background(), catalogConfigureShortTimeout)
 					defer authCancel()
 
-					logger.Infof("[TEST][T318500171] testing --reset-podman-auth when catalog is not deployed")
+					logger.Infof("[TEST] testing --reset-podman-auth when catalog is not deployed")
 					authOut, authErr := cli.CatalogConfigureResetAuth(authCtx, cfg, appRuntime)
 					notRunningOutput(authOut, authErr)
 
@@ -810,10 +810,10 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					certCtx, certCancel := context.WithTimeout(context.Background(), catalogConfigureShortTimeout)
 					defer certCancel()
 
-					logger.Infof("[TEST][T318500171] testing --reset-certificate when catalog is not deployed")
+					logger.Infof("[TEST] testing --reset-certificate when catalog is not deployed")
 					certOut, certErr := cli.CatalogConfigureResetCert(certCtx, cfg, cert.CertPath, cert.KeyPath, appRuntime)
 					notRunningOutput(certOut, certErr)
-					logger.Infof("[TEST][T318500171] reset-without-deployment validated — both flags reported 'not running'")
+					logger.Infof("[TEST] reset-without-deployment validated — both flags reported 'not running'")
 				},
 			)
 		})
@@ -822,7 +822,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 
 		ginkgo.Context("Extremely Long Basedir Path", func() {
 			ginkgo.It(
-				"[T318500172] rejects an extremely long --basedir path",
+				"rejects an extremely long --basedir path",
 				ginkgo.Label("catalog-configure", "custom-path", "negative", "spyre-independent"),
 				func() {
 					skipIfNotPodman()
@@ -833,7 +833,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureShortTimeout)
 					defer cancel()
 
-					logger.Infof("[TEST][T318500172] testing catalog configure with path length %d", len(longPath))
+					logger.Infof("[TEST] testing catalog configure with path length %d", len(longPath))
 					output, err := cli.CatalogConfigureWithBasedir(ctx, cfg, longPath, appRuntime)
 					gomega.Expect(err).To(gomega.HaveOccurred(),
 						"extremely long basedir path should be rejected; output:\n%s", output)
@@ -851,7 +851,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 						),
 						"expected a path-related error; got:\n%s", combined,
 					)
-					logger.Infof("[TEST][T318500172] extremely long basedir path correctly rejected: %v", err)
+					logger.Infof("[TEST] extremely long basedir path correctly rejected: %v", err)
 				},
 			)
 		})
@@ -860,13 +860,13 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 
 		ginkgo.Context("Non-Root User Configuration", func() {
 			ginkgo.It(
-				"[T318500173] non-root user can configure catalog with a home-directory basedir",
+				"non-root user can configure catalog with a home-directory basedir",
 				ginkgo.Label("catalog-configure", "custom-path", "non-root", "spyre-dependent"),
 				func() {
 					skipIfNotPodman()
 					skipIfNoCatalogPassword()
 
-					homeDir := nonRootHomeDir("T318500173")
+					homeDir := nonRootHomeDir()
 					basedir := filepath.Join(homeDir, ".ais-e2e-test", fmt.Sprintf("catalog-%d", time.Now().UnixNano()))
 					gomega.Expect(os.MkdirAll(basedir, 0o755)).To(gomega.Succeed())
 					defer func() { _ = os.RemoveAll(filepath.Join(homeDir, ".ais-e2e-test")) }()
@@ -874,16 +874,16 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					ctx, cancel := context.WithTimeout(context.Background(), catalogConfigureTestTimeout)
 					defer cancel()
 
-					output, configErr := nonRootCatalogRun("T318500173", ctx, "--basedir", basedir)
+					output, configErr := nonRootCatalogRun(ctx, "--basedir", basedir)
 					gomega.Expect(configErr).NotTo(gomega.HaveOccurred(),
 						"non-root catalog configure should succeed; output:\n%s", output)
 					gomega.Expect(cli.ValidateCatalogCustomPathOutput(output)).To(gomega.Succeed())
-					logger.Infof("[TEST][T318500173] non-root catalog configure succeeded")
+					logger.Infof("[TEST] non-root catalog configure succeeded")
 				},
 			)
 
 			ginkgo.It(
-				"[T318500174] non-root user is rejected when using a root-owned system basedir",
+				"non-root user is rejected when using a root-owned system basedir",
 				ginkgo.Label("catalog-configure", "custom-path", "non-root", "negative", "spyre-independent"),
 				func() {
 					skipIfNotPodman()
@@ -893,7 +893,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					defer cancel()
 
 					const systemBasedir = "/var/lib/ai-services"
-					output, configErr := nonRootCatalogRun("T318500174", ctx, "--basedir", systemBasedir)
+					output, configErr := nonRootCatalogRun(ctx, "--basedir", systemBasedir)
 					gomega.Expect(configErr).To(gomega.HaveOccurred(),
 						"non-root user accessing system basedir should fail; output:\n%s", output)
 
@@ -909,7 +909,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 						),
 						"expected permission-denied error; got:\n%s", combined,
 					)
-					logger.Infof("[TEST][T318500174] non-root permission check validated: %v", configErr)
+					logger.Infof("[TEST] non-root permission check validated: %v", configErr)
 				},
 			)
 		})
@@ -959,47 +959,47 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 					}
 
 					testAppName = appName
-					logger.Infof("[TEST][Endpoints] backend=%s app=%s", endpointBackendURL, testAppName)
+					logger.Infof("[TEST] backend=%s app=%s", endpointBackendURL, testAppName)
 				})
 
 				ginkgo.It(
-					"[T318500136] catalog returns service-level prompt params endpoint",
+					"catalog returns service-level prompt params endpoint",
 					ginkgo.Label("catalog-configure", "endpoints", "spyre-dependent"),
 					func() {
 						url := endpointBackendURL + "/api/v1/catalog/prompt-params"
-						logger.Infof("[TEST][T318500136] GET %s", url)
+						logger.Infof("[TEST] GET %s", url)
 						_, status, err := catalogDoRequest(context.Background(), http.MethodGet, url, authToken, nil)
 						gomega.Expect(err).NotTo(gomega.HaveOccurred())
 						gomega.Expect(status).To(
 							gomega.SatisfyAny(gomega.Equal(http.StatusOK), gomega.Equal(http.StatusNotFound)),
 							"expected 200 or 404 from prompt-params endpoint; got %d", status,
 						)
-						logger.Infof("[TEST][T318500136] prompt-params endpoint returned HTTP %d", status)
+						logger.Infof("[TEST] prompt-params endpoint returned HTTP %d", status)
 					},
 				)
 
 				ginkgo.It(
-					"[T318500138] catalog applications endpoint accepts a sample payload",
+					"catalog applications endpoint accepts a sample payload",
 					ginkgo.Label("catalog-configure", "endpoints", "spyre-dependent"),
 					func() {
 						if testAppName == "" {
-							ginkgo.Skip("[T318500138] no application name — skipping applications endpoint test")
+							ginkgo.Skip("no application name — skipping applications endpoint test")
 						}
 						url := endpointBackendURL + "/api/v1/applications"
-						logger.Infof("[TEST][T318500138] GET %s", url)
+						logger.Infof("[TEST] GET %s", url)
 						body, status, err := catalogDoRequest(context.Background(), http.MethodGet, url, authToken, nil)
 						gomega.Expect(err).NotTo(gomega.HaveOccurred())
 						gomega.Expect(status).To(gomega.Equal(http.StatusOK),
 							"applications list should return 200; body: %s", string(body))
-						logger.Infof("[TEST][T318500138] applications endpoint returned HTTP %d", status)
+						logger.Infof("[TEST] applications endpoint returned HTTP %d", status)
 					},
 				)
 
 				ginkgo.It(
-					"[T318500139] catalog applications endpoint handles a watsonx-flavored payload",
-					ginkgo.Label("catalog-configure", "endpoints", "spyre-dependent"),
+					"catalog applications endpoint handles a watsonx-flavored payload",
+					ginkgo.Label("catalog-configure", "endpoints"),
 					func() {
-						chatEndpointExpectNoError(context.Background(), "T318500139", endpointBackendURL, testAppName, authToken, map[string]interface{}{
+						chatEndpointExpectNoError(context.Background(), endpointBackendURL, testAppName, authToken, map[string]interface{}{
 							"messages": []map[string]string{{"role": "user", "content": "Hello from watsonx test"}},
 							"model":    "ibm/granite-3-2b-instruct",
 						})
@@ -1007,10 +1007,10 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 				)
 
 				ginkgo.It(
-					"[T318500140] catalog applications endpoint handles a vllm-key-flavored payload",
-					ginkgo.Label("catalog-configure", "endpoints", "spyre-dependent"),
+					"catalog applications endpoint handles a vllm-key-flavored payload",
+					ginkgo.Label("catalog-configure", "endpoints"),
 					func() {
-						chatEndpointExpectNoError(context.Background(), "T318500140", endpointBackendURL, testAppName, authToken, map[string]interface{}{
+						chatEndpointExpectNoError(context.Background(), endpointBackendURL, testAppName, authToken, map[string]interface{}{
 							"messages":   []map[string]string{{"role": "user", "content": "Hello from vllm test"}},
 							"model":      "vllm-local",
 							"extra_body": map[string]string{"api_key": "test-vllm-key"},
@@ -1019,10 +1019,10 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 				)
 
 				ginkgo.It(
-					"[T318500141] catalog application endpoint accepts a system prompt in the payload",
+					"catalog application endpoint accepts a system prompt in the payload",
 					ginkgo.Label("catalog-configure", "endpoints", "spyre-dependent"),
 					func() {
-						chatEndpointExpectNoError(context.Background(), "T318500141", endpointBackendURL, testAppName, authToken, map[string]interface{}{
+						chatEndpointExpectNoError(context.Background(), endpointBackendURL, testAppName, authToken, map[string]interface{}{
 							"messages": []map[string]string{
 								{"role": "system", "content": "You are a helpful assistant."},
 								{"role": "user", "content": "Hello"},
@@ -1032,7 +1032,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 				)
 
 				ginkgo.It(
-					"[T318500142] catalog authentication endpoints work correctly",
+					"catalog authentication endpoints work correctly",
 					ginkgo.Label("catalog-configure", "endpoints", "spyre-dependent"),
 					func() {
 						_, catalogUsername, catalogPassword := bootstrap.GetCatalogCreds()
@@ -1042,40 +1042,40 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 
 						loginURL := endpointBackendURL + "/api/v1/auth/login"
 						loginPayload, _ := json.Marshal(map[string]string{"username": catalogUsername, "password": catalogPassword})
-						logger.Infof("[TEST][T318500142] POST %s (valid creds)", loginURL)
+						logger.Infof("[TEST] POST %s (valid creds)", loginURL)
 						loginBody, loginStatus, loginErr := catalogDoRequest(context.Background(), http.MethodPost, loginURL, "", loginPayload)
 						gomega.Expect(loginErr).NotTo(gomega.HaveOccurred())
 						gomega.Expect(loginStatus).To(gomega.Equal(http.StatusOK),
 							"valid login must return 200; body: %s", string(loginBody))
 
 						badPayload, _ := json.Marshal(map[string]string{"username": catalogUsername, "password": "definitely-wrong-password-e2e"})
-						logger.Infof("[TEST][T318500142] POST %s (invalid creds)", loginURL)
+						logger.Infof("[TEST] POST %s (invalid creds)", loginURL)
 						_, badStatus, badErr := catalogDoRequest(context.Background(), http.MethodPost, loginURL, "", badPayload)
 						gomega.Expect(badErr).NotTo(gomega.HaveOccurred())
 						gomega.Expect(badStatus).To(
 							gomega.SatisfyAny(gomega.Equal(http.StatusUnauthorized), gomega.Equal(http.StatusForbidden)),
 							"invalid login must return 401 or 403; got %d", badStatus,
 						)
-						logger.Infof("[TEST][T318500142] authentication endpoints validated")
+						logger.Infof("[TEST] authentication endpoints validated")
 					},
 				)
 
 				ginkgo.It(
-					"[T318500143] catalog application-management endpoints are accessible",
+					"catalog application-management endpoints are accessible",
 					ginkgo.Label("catalog-configure", "endpoints", "spyre-dependent"),
 					func() {
 						listURL := endpointBackendURL + "/api/v1/applications"
-						logger.Infof("[TEST][T318500143] GET %s", listURL)
+						logger.Infof("[TEST] GET %s", listURL)
 						body, status, err := catalogDoRequest(context.Background(), http.MethodGet, listURL, authToken, nil)
 						gomega.Expect(err).NotTo(gomega.HaveOccurred())
 						gomega.Expect(status).To(gomega.Equal(http.StatusOK),
 							"application list must return 200; body: %s", string(body))
-						logger.Infof("[TEST][T318500143] application endpoints validated")
+						logger.Infof("[TEST] application endpoints validated")
 					},
 				)
 
 				ginkgo.It(
-					"[T318500144] catalog service runtime endpoints respond correctly",
+					"catalog service runtime endpoints respond correctly",
 					ginkgo.Label("catalog-configure", "endpoints", "spyre-dependent"),
 					func() {
 						endpoints := []struct {
@@ -1089,7 +1089,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 
 						for _, ep := range endpoints {
 							url := endpointBackendURL + ep.path
-							logger.Infof("[TEST][T318500144] %s %s", ep.method, url)
+							logger.Infof("[TEST] %s %s", ep.method, url)
 							_, status, err := catalogDoRequest(context.Background(), ep.method, url, authToken, nil)
 							gomega.Expect(err).NotTo(gomega.HaveOccurred(),
 								"request to %s must not error", url)
@@ -1098,7 +1098,7 @@ var _ = ginkgo.Describe("Catalog Configure Tests",
 								"%s %s must not return 5xx; got %d", ep.method, url, status,
 							)
 						}
-						logger.Infof("[TEST][T318500144] catalog runtime endpoints validated")
+						logger.Infof("[TEST] catalog runtime endpoints validated")
 					},
 				)
 			},

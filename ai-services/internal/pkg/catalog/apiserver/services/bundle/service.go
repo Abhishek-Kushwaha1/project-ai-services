@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/db/models"
@@ -16,14 +17,16 @@ import (
 
 // bundleService implements BundleServiceInterface.
 type bundleService struct {
-	repo repository.BundleRepository
+	repo     repository.BundleRepository
+	svcRepo  repository.ServiceRepository
+	compRepo repository.ComponentRepository
 	// TODO: add CatalogProvider reference for Reload() calls once wired in.
 	// catalogProvider *catalog.CatalogProvider
 }
 
-// NewBundleService creates a new bundleService backed by the given BundleRepository.
-func NewBundleService(repo repository.BundleRepository) BundleServiceInterface {
-	return &bundleService{repo: repo}
+// NewBundleService creates a new bundleService backed by the given repositories.
+func NewBundleService(repo repository.BundleRepository, svcRepo repository.ServiceRepository, compRepo repository.ComponentRepository) BundleServiceInterface {
+	return &bundleService{repo: repo, svcRepo: svcRepo, compRepo: compRepo}
 }
 
 // ValidateBundle validates a .tar.gz archive without persisting anything.
@@ -127,28 +130,124 @@ func (s *bundleService) ProcessBundle(ctx context.Context, file io.Reader, userI
 
 // ReplaceBundle is the synchronous PUT update path.
 //
-// Processing steps (to be implemented):
 //  1. peekMetadata: read minimal identity fields from the archive.
 //  2. Immutability check: meta.CatalogID() and meta.CatalogType() must match existing record.
-//     Return *ValidationError{Code:422} on mismatch.
-//  3. Full validation: call the same validation logic as ValidateBundle.
+//     Returns *ValidationError{Code:422} on mismatch.
+//  3. TODO — full archive-based validation; call ValidateBundle once implemented.
 //  4. Mark existing row processing via BundleRepository.Update.
 //  5. Extract archive to a staging directory (<catalog_id>-<version>-new).
 //  6. Rename staging directory into the final path (bundleDirPath).
-//  7. UPDATE existing row in-place (status=active, version, name, size_bytes) via
-//     BundleRepository.Update.
-//  8. Reload CatalogProvider.
+//  7. UPDATE existing row in-place (status=active, version, name, size_bytes) via BundleRepository.Update.
+//  8. TODO — CatalogProvider.Reload() once the provider reference is wired in.
 //  9. Delete old on-disk directory when it differs from the new final path.
 //  10. Re-fetch via BundleRepository.GetByID and return as *BundleResponse.
 //     On failure after step 4: mark row failed, store error message.
-func (s *bundleService) ReplaceBundle(_ context.Context, _ *BundleRecord, _ io.Reader, _ string) (*BundleResponse, error) {
-	// TODO: implement
-	panic("not implemented")
+func (s *bundleService) ReplaceBundle(ctx context.Context, existing *BundleResponse, file io.Reader, _ string) (*BundleResponse, error) {
+	// Step 1: peek minimal identity fields from root metadata.yaml.
+	archiveBytes, meta, err := peekMetadata(file)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 2: immutability check — catalog_id and catalog_type must not change.
+	if meta.CatalogID() != existing.CatalogID {
+		return nil, &validators.ValidationError{
+			Code: http.StatusUnprocessableEntity,
+			Message: fmt.Sprintf(
+				"catalog_id mismatch: archive contains %q but existing bundle has %q",
+				meta.CatalogID(), existing.CatalogID,
+			),
+		}
+	}
+	if meta.CatalogType() != existing.CatalogType {
+		return nil, &validators.ValidationError{
+			Code: http.StatusUnprocessableEntity,
+			Message: fmt.Sprintf(
+				"catalog_type mismatch: archive contains %q but existing bundle has %q",
+				meta.CatalogType(), existing.CatalogType,
+			),
+		}
+	}
+
+	// Step 3: TODO — full archive-based validation; call s.ValidateBundle once implemented.
+
+	// Step 3a: guard — reject if any running service/component is using this catalog entry.
+	if err := s.checkNoRunningInstances(ctx, meta); err != nil {
+		return nil, err
+	}
+
+	existingID, err := uuid.Parse(existing.ID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid existing bundle id %q: %w", existing.ID, err)
+	}
+
+	// Step 4: mark existing row processing.
+	statusProcessing := models.BundleStatusProcessing
+	if updateErr := s.repo.Update(ctx, existingID, models.BundleUpdate{Status: &statusProcessing}); updateErr != nil {
+		return nil, fmt.Errorf("failed to mark bundle as processing: %w", updateErr)
+	}
+
+	// Steps 5–10: extract, rename, activate, cleanup. Any failure after step 4
+	// marks the row failed.
+	resp, replaceErr := s.replaceBundleFiles(ctx, existingID, existing, meta, archiveBytes)
+	if replaceErr != nil {
+		s.markFailed(ctx, existingID, replaceErr.Error())
+
+		return nil, replaceErr
+	}
+
+	return resp, nil
+}
+
+// replaceBundleFiles performs the file-system and DB operations for ReplaceBundle
+// after the row has been moved to "processing". Called only by ReplaceBundle.
+func (s *bundleService) replaceBundleFiles(ctx context.Context, existingID uuid.UUID, existing *BundleResponse, meta BundleMetadata, archiveBytes []byte) (*BundleResponse, error) {
+	oldDir := bundleDirPath(existing.CatalogType, existing.CatalogID, existing.Version)
+	newFinalDir := bundleDirPath(meta.CatalogType(), meta.CatalogID(), meta.Version())
+	stagingDir := newFinalDir + "-new"
+
+	// Step 5: extract to staging directory.
+	sizeBytes, err := extractAndMeasure(archiveBytes, stagingDir)
+	if err != nil {
+		_ = os.RemoveAll(stagingDir)
+
+		return nil, err
+	}
+
+	// Step 6: rename staging into the final path.
+	// Remove any leftover final directory (can exist when version is unchanged).
+	_ = os.RemoveAll(newFinalDir)
+	if err := os.Rename(stagingDir, newFinalDir); err != nil {
+		_ = os.RemoveAll(stagingDir)
+
+		return nil, fmt.Errorf("failed to rename staging directory into place: %w", err)
+	}
+
+	// Step 7: update DB row in-place.
+	statusActive := models.BundleStatusActive
+	name := meta.DisplayName()
+	version := meta.Version()
+	if updateErr := s.repo.Update(ctx, existingID, models.BundleUpdate{
+		Status:    &statusActive,
+		SizeBytes: &sizeBytes,
+		Name:      &name,
+		Version:   &version,
+	}); updateErr != nil {
+		return nil, fmt.Errorf("failed to activate replaced bundle: %w", updateErr)
+	}
+
+	// Step 8: TODO — CatalogProvider.Reload() once the provider reference is wired in.
+
+	// Step 9: delete old on-disk directory when it differs from the new final path.
+	if oldDir != newFinalDir {
+		_ = os.RemoveAll(oldDir)
+	}
+
+	// Step 10: re-fetch the authoritative row from DB and return.
+	return s.GetBundleByID(ctx, existingID.String())
 }
 
 // GetBundleByID returns the full BundleResponse for the given string UUID.
-// Used by the GET /:id handler, by ProcessBundle for its final re-fetch, and as
-// the pre-flight existence check in UpdateBundle and DeleteBundle.
 // Returns (nil, nil) when not found.
 func (s *bundleService) GetBundleByID(ctx context.Context, bundleID string) (*BundleResponse, error) {
 	id, err := uuid.Parse(bundleID)
@@ -236,6 +335,57 @@ func (s *bundleService) ListBundles(ctx context.Context, req BundleListRequest) 
 // -----------------------------------------------------------------------
 // Internal helpers
 // -----------------------------------------------------------------------
+
+// checkNoRunningInstances returns a 409 Conflict ValidationError when any
+// service or component row in the DB is already using the catalog entry
+// identified by meta.  It is called before ReplaceBundle (and can be reused
+// by DeleteBundle in the future) to prevent in-flight replacements or
+// deletions while live workloads depend on the bundle.
+//
+//   - For a service bundle:  checks the services table by catalog_id.
+//   - For a component bundle: the catalog_id is "<type>--<provider>"; both
+//     halves are matched against the components table (type + provider).
+func (s *bundleService) checkNoRunningInstances(ctx context.Context, meta BundleMetadata) error {
+	switch meta.CatalogType() {
+	case CatalogTypeService:
+		exists, err := s.svcRepo.ExistsByCatalogID(ctx, meta.CatalogID())
+		if err != nil {
+			return fmt.Errorf("failed to check running services: %w", err)
+		}
+		if exists {
+			return &validators.ValidationError{
+				Code: http.StatusConflict,
+				Message: fmt.Sprintf(
+					"cannot replace bundle: one or more services are currently running with catalog_id %q",
+					meta.CatalogID(),
+				),
+			}
+		}
+
+	case CatalogTypeComponent:
+		// catalog_id is "<component_type>--<provider>"; split on the first "--".
+		parts := strings.SplitN(meta.CatalogID(), "--", splitTwo)
+		if len(parts) != splitTwo {
+			return fmt.Errorf("malformed component catalog_id %q: expected <type>--<provider>", meta.CatalogID())
+		}
+		componentType, provider := parts[0], parts[1]
+		exists, err := s.compRepo.ExistsByTypeAndProvider(ctx, componentType, provider)
+		if err != nil {
+			return fmt.Errorf("failed to check running components: %w", err)
+		}
+		if exists {
+			return &validators.ValidationError{
+				Code: http.StatusConflict,
+				Message: fmt.Sprintf(
+					"cannot replace bundle: one or more components are currently running with type %q and provider %q",
+					componentType, provider,
+				),
+			}
+		}
+	}
+
+	return nil
+}
 
 // rowToResponse maps a DB row to the HTTP BundleResponse shape.
 func rowToResponse(b *models.CatalogBundle) *BundleResponse {

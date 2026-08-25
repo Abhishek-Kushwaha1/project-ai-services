@@ -2922,24 +2922,19 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			pdfPath := digitization.GetTestPDFPath()
 			gomega.Expect(pdfPath).NotTo(gomega.BeEmpty())
 
-			// Clear any stale documents from a previous failed run before ingesting.
+			// Clear any stale documents from a previous failed run before starting.
 			// Without this, CreateJob returns 409 RESOURCE_LOCKED for test_doc.pdf
 			// when it was already processed in a prior run.
 			ginkgo.By("clearing any stale documents from previous test runs")
 			if err := digitization.DeleteAllDocuments(ctx, digitizeBaseURL); err != nil {
-				logger.Warningf("[BACKUP-RESTORE] pre-ingest document cleanup failed (non-fatal): %v", err)
+				logger.Warningf("[BACKUP-RESTORE] pre-test document cleanup failed (non-fatal): %v", err)
 			}
 
-			gomega.Expect(digitization.IngestTestDocumentViaDigitizeAPI(ctx, digitizeBaseURL, "e2e-backup-restore-ingestion")).To(gomega.Succeed())
-
-			// The ingestion job above creates a document record for test_doc.pdf.
-			// Delete it so the subsequent digitization CreateJob for the same file
-			// does not receive a 409 RESOURCE_LOCKED response.
-			ginkgo.By("clearing ingestion documents before digitization job")
-			if err := digitization.DeleteAllDocuments(ctx, digitizeBaseURL); err != nil {
-				logger.Warningf("[BACKUP-RESTORE] post-ingest document cleanup failed (non-fatal): %v", err)
-			}
-
+			// Run digitization FIRST so test_doc.pdf is written to the digitize DB.
+			// Ingestion runs second to populate OpenSearch for RAG queries.
+			// This order avoids a 409 RESOURCE_LOCKED: the file is not yet known to
+			// the system when digitization runs, so there is no conflict.
+			ginkgo.By("creating a digitization job to populate the digitize database")
 			jobResp, err := digitization.CreateJob(ctx, digitizeBaseURL, pdfPath, "digitization", "json", "e2e-backup-restore-digitization")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -2956,6 +2951,12 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			digitizeDocName = doc.Name
 			digitizeDocStatus = doc.Status
+
+			// Ingest test_doc.pdf AFTER digitization so OpenSearch is populated for
+			// the RAG queries below. Digitization has already recorded the file, so
+			// ingestion re-processes it without conflict (different operation type).
+			ginkgo.By("ingesting test document to populate OpenSearch for RAG queries")
+			gomega.Expect(digitization.IngestTestDocumentViaDigitizeAPI(ctx, digitizeBaseURL, "e2e-backup-restore-ingestion")).To(gomega.Succeed())
 
 			ragPrompts := []struct {
 				question string
@@ -3132,25 +3133,13 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					// ── Step 2: Clear any stale documents from previous runs ───────
 					ginkgo.By("clearing any stale documents from previous test runs")
 					if err := digitization.DeleteAllDocuments(specCtx, osDigitizeURL); err != nil {
-						logger.Warningf("[OPENSHIFT-BR] pre-ingest document cleanup failed (non-fatal): %v", err)
+						logger.Warningf("[OPENSHIFT-BR] pre-test document cleanup failed (non-fatal): %v", err)
 					}
 
-					// ── Step 3: Ingest test document (populates OpenSearch) ────────
-					ginkgo.By("ingesting a test document via the digitize microservice")
-					gomega.Expect(
-						digitization.IngestTestDocumentViaDigitizeAPI(specCtx, osDigitizeURL, "e2e-os-br-ingest"),
-					).To(gomega.Succeed())
-
-					// ── Step 4: Clear ingestion document before digitization job ──
-					// The ingestion job above creates a document record for test_doc.pdf.
-					// Delete it so the subsequent digitization CreateJob for the same
-					// file does not receive a 409 RESOURCE_LOCKED response.
-					ginkgo.By("clearing ingestion documents before digitization job")
-					if err := digitization.DeleteAllDocuments(specCtx, osDigitizeURL); err != nil {
-						logger.Warningf("[OPENSHIFT-BR] post-ingest document cleanup failed (non-fatal): %v", err)
-					}
-
-					// ── Step 5: Create and complete a digitization job ────────────
+					// ── Step 3: Run digitization FIRST to populate the digitize DB ─
+					// Ingestion runs after so OpenSearch is populated for RAG queries.
+					// This order avoids a 409 RESOURCE_LOCKED: the file is not yet
+					// known to the system when digitization runs, so there is no conflict.
 					ginkgo.By("creating a digitization job to populate the digitize database")
 					osPDFPath := digitization.GetTestPDFPath()
 					gomega.Expect(osPDFPath).NotTo(gomega.BeEmpty())
@@ -3172,6 +3161,16 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					osDigitizeDocName = osDoc.Name
 					osDigitizeDocStatus = osDoc.Status
 					logger.Infof("[OPENSHIFT-BR] Seeded digitize job=%s doc=%s", osDigitizeJobID, osDigitizeDocName)
+
+					// ── Step 4: Ingest test document to populate OpenSearch ────────
+					// Runs after digitization so test_doc.pdf is already in the digitize
+					// DB. Ingestion re-processes the file (different operation type) and
+					// indexes it into OpenSearch without receiving a 409.
+					ginkgo.By("ingesting test document to populate OpenSearch for RAG queries")
+					gomega.Expect(
+						digitization.IngestTestDocumentViaDigitizeAPI(specCtx, osDigitizeURL, "e2e-os-br-ingest"),
+					).To(gomega.Succeed())
+					logger.Infof("[OPENSHIFT-BR] Ingestion completed — OpenSearch populated")
 
 					// ── Step 5: Capture pre-backup RAG responses ──────────────────
 					ginkgo.By("capturing pre-backup RAG responses for known prompts")

@@ -507,6 +507,7 @@ func getOpenShiftRouteURLs(appName string) []string {
 		out, err = common.RunCommand("oc", "get", "routes", "-n", appName)
 		if err != nil {
 			logger.Warningf("[WAIT] oc get routes -n %s failed: %v", appName, err)
+
 			return nil
 		}
 

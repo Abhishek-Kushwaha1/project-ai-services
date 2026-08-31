@@ -1293,7 +1293,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.Connector"
+                                "$ref": "#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ConnectorResponse"
                             }
                         }
                     },
@@ -2623,31 +2623,44 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_project-ai-services_ai-services_internal_pkg_catalog_types.Connector": {
+        "github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ConnectorProvider": {
             "type": "object",
             "properties": {
-                "connector_name": {
-                    "description": "display label for connector_type",
-                    "type": "string"
-                },
-                "connector_type": {
-                    "description": "e.g. \"datasource\"",
-                    "type": "string"
-                },
                 "description": {
-                    "description": "short description",
+                    "description": "Description is a short description of the provider.",
                     "type": "string"
                 },
                 "id": {
-                    "description": "e.g. \"object_storage\", \"file_system\"",
+                    "description": "ID is the provider identifier (e.g. \"object_storage\", \"file_system\").",
                     "type": "string"
                 },
                 "name": {
-                    "description": "display name",
+                    "description": "Name is the human-readable display name of the provider.",
                     "type": "string"
                 },
+                "schema": {
+                    "description": "Schema is the path to the provider's JSON Schema params endpoint.",
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ConnectorResponse": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "description": "Name is the display label for the connector type (e.g. \"Data sources\").",
+                    "type": "string"
+                },
+                "provider": {
+                    "description": "Provider contains the identity and schema URL of the connector provider.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ConnectorProvider"
+                        }
+                    ]
+                },
                 "type": {
-                    "description": "always \"connector\"",
+                    "description": "Type is the connector type (e.g. \"datasource\").",
                     "type": "string"
                 }
             }

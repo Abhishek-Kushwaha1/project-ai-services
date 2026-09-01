@@ -214,6 +214,7 @@ func chatEndpointExpectNoError(ctx context.Context, backendURL, appName, token s
 
 var _ = ginkgo.Describe("Catalog Configure Tests",
 	ginkgo.Ordered,
+	ginkgo.Label("catalog-configure"),
 	func() {
 
 		// ── Suite-level setup / teardown ──────────────────────────────────────

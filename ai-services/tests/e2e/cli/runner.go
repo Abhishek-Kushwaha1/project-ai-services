@@ -206,7 +206,7 @@ func CreateRAGAppAndValidate(
 	appRuntime string,
 ) (string, error) {
 	const (
-		maxRetries            = 10               //nolint:mnd
+		maxRetries            = 30               //nolint:mnd
 		waitTime              = 15 * time.Second //nolint:mnd
 		defaultCommandTimeout = 10 * time.Second //nolint:mnd
 	)

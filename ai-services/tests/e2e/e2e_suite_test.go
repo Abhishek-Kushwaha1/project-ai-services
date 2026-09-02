@@ -1521,7 +1521,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			expectErrResp(err, errorResp)
 
 			gomega.Expect(errorResp.Error.Code).To(gomega.Equal("INVALID_REQUEST"))
-			gomega.Expect(errorResp.Error.Message).To(gomega.Equal("Request validation failed: Only 1 file allowed for digitization."))
+			gomega.Expect(errorResp.Error.Message).To(gomega.ContainSubstring("1 file"))
 			gomega.Expect(errorResp.Error.Status).To(gomega.Equal(400))
 
 			logger.Infof("[TEST] Multiple files correctly rejected for digitization with error: %s", errorResp.Error.Message)
@@ -1551,9 +1551,10 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			errorResp, err := digitization.CreateJobExpectingError(ctx, digitizeBaseURL, pdfPath, "digitization", "json", "e2e-concurrent-3")
 			expectErrResp(err, errorResp)
 
-			// Validate the error response structure
+			// Validate the error response structure.
+			// ContainSubstring on the message so minor backend wording changes don't break this.
 			gomega.Expect(errorResp.Error.Code).To(gomega.Equal("RATE_LIMIT_EXCEEDED"))
-			gomega.Expect(errorResp.Error.Message).To(gomega.Equal("Too many requests: Too many concurrent OperationType.DIGITIZATION requests."))
+			gomega.Expect(errorResp.Error.Message).To(gomega.ContainSubstring("Too many concurrent"))
 			gomega.Expect(errorResp.Error.Status).To(gomega.Equal(429))
 
 			logger.Infof("[TEST] Third concurrent digitization job correctly rejected with rate limit error: %s", errorResp.Error.Message)

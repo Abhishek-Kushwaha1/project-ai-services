@@ -538,6 +538,16 @@ func WaitForApplicationInfoURLs(ctx context.Context, cfg *config.Config, appName
 
 		infoOutput, infoErr := ApplicationInfo(ctx, cfg, appName, appRuntime)
 		if infoErr != nil {
+			errStr := infoErr.Error()
+			// Auth errors (invalid/expired refresh token, HTTP 401) will never
+			// self-heal through retrying — the CLI stores the bad token on disk
+			// and returns the same error on every attempt.  Bail immediately so
+			// the caller sees a clear error instead of waiting out the full timeout.
+			if strings.Contains(errStr, "refresh token") ||
+				strings.Contains(errStr, "HTTP 401") ||
+				strings.Contains(errStr, "invalid refresh token") {
+				return "", fmt.Errorf("application info failed with auth error (re-login required): %w", infoErr)
+			}
 			logger.Warningf("[WAIT] application info attempt %d failed: %v — retrying", attempt, infoErr)
 			time.Sleep(pollInterval)
 

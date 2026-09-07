@@ -233,6 +233,18 @@ func catalogLoginWithDiscovery(loginCtx context.Context, fatal bool) {
 		catalogBackendURL = serverURL
 	}
 
+	// Clear any stale on-disk tokens before logging in.  The catalog CLI's
+	// New() loads saved credentials and tries to refresh the stored access
+	// token via the refresh token.  When the catalog server has been restarted
+	// (e.g. between nightly runs) the refresh token is invalid and the CLI
+	// returns HTTP 401 "invalid refresh token" — even though the password is
+	// correct — because it never reaches the password-login code path.
+	// Running logout first wipes the credential file so the subsequent login
+	// starts with a clean state and uses the password directly.
+	if logoutOut, logoutErr := cli.CatalogLogout(loginCtx, cfg, appRuntime); logoutErr != nil {
+		logger.Warningf("[TEST] pre-login logout failed (non-fatal, token file may not exist): %v\nOutput: %s", logoutErr, logoutOut)
+	}
+
 	_, loginErr := cli.CatalogLogin(loginCtx, cfg, serverURL, loginUsername, loginPassword, appRuntime, loginInsecure)
 	if loginErr != nil {
 		if fatal {

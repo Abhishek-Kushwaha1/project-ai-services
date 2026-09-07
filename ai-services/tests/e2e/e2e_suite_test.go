@@ -226,6 +226,13 @@ func catalogLoginWithDiscovery(loginCtx context.Context, fatal bool) {
 		return
 	}
 
+	// Persist the discovered URL so downstream specs can use catalogBackendURL
+	// without re-running catalog info (previously done by the "ensures catalog
+	// service is running" spec which now lives in catalog_configure_test.go).
+	if catalogBackendURL == "" {
+		catalogBackendURL = serverURL
+	}
+
 	_, loginErr := cli.CatalogLogin(loginCtx, cfg, serverURL, loginUsername, loginPassword, appRuntime, loginInsecure)
 	if loginErr != nil {
 		if fatal {
@@ -329,14 +336,11 @@ var _ = ginkgo.BeforeSuite(func() {
 	logger.Infof("[SETUP] ai-services version: %s", binVersion)
 
 	ginkgo.By("Logging in to catalog API server (if already running)")
-	if providedAppName != "" {
-		// Existing app: catalog is already running — login is required before any CLI call.
-		// Fatal so a missing CATALOG_PASSWORD surfaces immediately with a clear message.
-		catalogLoginWithDiscovery(ctx, true)
-	} else {
-		// Fresh run: catalog may not be running yet — non-fatal, login happens again before 'application create'.
-		catalogLoginWithDiscovery(ctx, false)
-	}
+	// Always non-fatal: catalog login is best-effort in BeforeSuite.
+	// Specs that require a valid catalog session (image list/pull, application create)
+	// perform their own login in a BeforeEach or at spec start, so a transient
+	// login failure here must never abort the entire suite.
+	catalogLoginWithDiscovery(ctx, false)
 
 	// Extract URLs from existing application (if provided) - must happen after catalog login.
 	if providedAppName != "" {
@@ -500,10 +504,9 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 	})
 	ginkgo.Context("Application Image Command Tests", func() {
 		// Re-establish the catalog session before every image command test.
-		// The "verifies catalog logout" spec in Bootstrap Steps explicitly revokes
-		// the access token, and catalog configure also replaces it internally.
-		// Without a fresh login here, application image list/pull hit the catalog
-		// API with a blacklisted token and receive HTTP 401: token revoked.
+		// Catalog configure replaces the token internally, so without a fresh
+		// login here, application image list/pull hit the catalog API with a
+		// stale token and receive HTTP 401: token revoked.
 		ginkgo.BeforeEach(func() {
 			if providedAppName != "" || appRuntime != "podman" {
 				return

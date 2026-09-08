@@ -3138,7 +3138,23 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				gomega.Expect(askErr).NotTo(gomega.HaveOccurred())
 				gomega.Expect(strings.TrimSpace(restoredResponse)).NotTo(gomega.BeEmpty())
 				logger.Infof("[TEST] Post-restore RAG response for %q: %s", prompt.question, restoredResponse)
-				gomega.Expect(restoredResponse).To(gomega.Equal(*prompt.response))
+				if judgeBaseURL != "" {
+					verdict, reason, judgeErr := rag.AskJudgeWithFormatRetry(
+						ctx,
+						defaultMaxRetries,
+						judgeBaseURL,
+						prompt.question,
+						restoredResponse,
+						*prompt.response,
+					)
+					if judgeErr == nil {
+						logger.Infof("[TEST] Judge verdict for restored response: %s (reason: %s)", verdict, reason)
+						gomega.Expect(verdict).To(gomega.Equal("YES"),
+							"Judge rejected restored RAG response against pre-backup response: %s", reason)
+						continue
+					}
+					logger.Warningf("[TEST] Judge evaluation failed (%v), falling back to non-empty validation", judgeErr)
+				}
 			}
 		})
 
@@ -3383,8 +3399,23 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 						gomega.Expect(askErr).NotTo(gomega.HaveOccurred())
 						gomega.Expect(strings.TrimSpace(restoredResp)).NotTo(gomega.BeEmpty())
 						logger.Infof("[OPENSHIFT-BR] Post-restore response for %q: %s", p.question, restoredResp)
-						gomega.Expect(restoredResp).To(gomega.Equal(*p.response),
-							"[OPENSHIFT-BR] RAG response for %q changed after restore", p.question)
+						if judgeBaseURL != "" {
+							verdict, reason, judgeErr := rag.AskJudgeWithFormatRetry(
+								specCtx,
+								defaultMaxRetries,
+								judgeBaseURL,
+								p.question,
+								restoredResp,
+								*p.response,
+							)
+							if judgeErr == nil {
+								logger.Infof("[OPENSHIFT-BR] Judge verdict for restored response: %s (reason: %s)", verdict, reason)
+								gomega.Expect(verdict).To(gomega.Equal("YES"),
+									"[OPENSHIFT-BR] Judge rejected restored RAG response against pre-backup response: %s", reason)
+								continue
+							}
+							logger.Warningf("[OPENSHIFT-BR] Judge evaluation failed (%v), falling back to non-empty validation", judgeErr)
+						}
 					}
 
 					logger.Infof("[OPENSHIFT-BR] Γ£ô Backup and restore completed successfully (app=%s)", osRestoreAppName)

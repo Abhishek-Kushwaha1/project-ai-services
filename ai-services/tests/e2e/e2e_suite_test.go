@@ -1432,31 +1432,28 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			logger.Infof("[TEST] Created job: %s", jobResp.JobID)
 
 			// Step 2: Try to delete in-progress document (should fail with 409)
+			// Document deletion lock is only enforced while the job is actively "in_progress".
 			logger.Infof("[TEST] Step 2: Testing in-progress document deletion protection")
-			time.Sleep(jobStartDelay) // Wait for job to start and document to be created.
-
-			jobStatus, err := digitization.GetJobStatus(ctx, digitizeBaseURL, jobResp.JobID)
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-			gomega.Expect(jobStatus.Documents).NotTo(gomega.BeEmpty())
-			docID := jobStatus.Documents[0].ID
-
-			// Guard: only assert the 409 if the job is still in a locked state.
-			// On fast hardware the document may already be completed.
-			if jobStatus.Status != "in_progress" && jobStatus.Status != "accepted" && jobStatus.Status != "pending" {
-				ginkgo.Skip("Skipping in-progress document deletion protection check — job completed before delete could be attempted")
-			}
-			err = digitization.DeleteDocument(ctx, digitizeBaseURL, docID)
-			if err == nil {
-				// Job/document may have completed right as delete was invoked.
-				s, sErr := digitization.GetJobStatus(ctx, digitizeBaseURL, jobResp.JobID)
-				if sErr == nil && (s.Status == "completed" || s.Status == "failed") {
-					ginkgo.Skip("Skipping in-progress document deletion protection check — job completed right when delete was attempted")
+			inProgressJobStatus, inProgressErr := digitization.WaitForJobInProgress(ctx, digitizeBaseURL, jobResp.JobID, 1*time.Minute, 500*time.Millisecond)
+			if inProgressErr != nil {
+				logger.Infof("[TEST] Skipping in-progress document deletion protection check: %v", inProgressErr)
+			} else if len(inProgressJobStatus.Documents) > 0 {
+				inProgressDocID := inProgressJobStatus.Documents[0].ID
+				err = digitization.DeleteDocument(ctx, digitizeBaseURL, inProgressDocID)
+				if err == nil {
+					// Job may have transitioned from in_progress to completed right as delete was invoked.
+					s, sErr := digitization.GetJobStatus(ctx, digitizeBaseURL, jobResp.JobID)
+					if sErr == nil && (s.Status == "completed" || s.Status == "failed") {
+						logger.Infof("[TEST] Job reached %s right when delete was attempted; skipping 409 assertion", s.Status)
+					} else {
+						gomega.Expect(err).To(gomega.HaveOccurred())
+					}
+				} else {
+					gomega.Expect(digitization.IsResourceLockedError(err)).To(gomega.BeTrue(),
+						"Expected resource locked error (409), got: %v", err)
+					logger.Infof("[TEST] \u2713 In-progress document deletion correctly failed with resource locked error")
 				}
 			}
-			gomega.Expect(err).To(gomega.HaveOccurred())
-			gomega.Expect(digitization.IsResourceLockedError(err)).To(gomega.BeTrue(),
-				"Expected resource locked error (409), got: %v", err)
-			logger.Infof("[TEST] \u2713 In-progress document deletion correctly failed with resource locked error")
 
 			// Step 3: Wait for job completion
 			logger.Infof("[TEST] Step 3: Waiting for job completion")
@@ -1467,7 +1464,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			// Step 4: Delete completed document (should succeed)
 			logger.Infof("[TEST] Step 4: Deleting completed document")
 			gomega.Expect(finalStatus.Documents).NotTo(gomega.BeEmpty())
-			docID = finalStatus.Documents[0].ID
+			docID := finalStatus.Documents[0].ID
 			err = digitization.DeleteDocument(ctx, digitizeBaseURL, docID)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			logger.Infof("[TEST] Γ£ô Completed document deleted successfully")

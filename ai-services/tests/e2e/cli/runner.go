@@ -988,7 +988,7 @@ func CatalogLogin(ctx context.Context, cfg *config.Config, serverURL, username, 
 	out, err := cmd.CombinedOutput()
 	output := string(out)
 	if err != nil {
-		return "", fmt.Errorf("catalog login failed: %w", err)
+		return output, fmt.Errorf("catalog login failed: %w: %s", err, strings.TrimSpace(output))
 	}
 
 	return output, nil

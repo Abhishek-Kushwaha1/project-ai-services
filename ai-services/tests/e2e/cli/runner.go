@@ -850,10 +850,32 @@ func ModelDownload(ctx context.Context, cfg *config.Config, templateName string,
 }
 
 // TemplatesCommand runs the 'application templates' command.
-// The --legacy flag is used so the command reads from embedded assets rather
-// than the catalog API, making it safe to call without a running catalog.
+// It runs with an isolated config directory so that any stale catalog
+// credentials stored from a previous run do not trigger a token-refresh
+// attempt against a catalog that may not be reachable in this environment.
+// This makes the command safe to call as a spyre-independent sanity check.
 func TemplatesCommand(ctx context.Context, cfg *config.Config, appRuntime string) (string, error) {
-	return runCLI(ctx, cfg, "application templates command run", "application", "templates", "--legacy", "--runtime", appRuntime)
+	args := []string{"application", "templates", "--runtime", appRuntime}
+	logger.Infof("[CLI] Running: %s %s", cfg.AIServiceBin, strings.Join(args, " "))
+
+	cmd := exec.CommandContext(ctx, cfg.AIServiceBin, args...)
+
+	// Use an empty temp dir as the config home so no stored credentials are
+	// read. os.UserConfigDir() resolves from $HOME / $XDG_CONFIG_HOME.
+	isolatedHome := os.TempDir()
+	cmd.Env = filteredProcessEnv("HOME", "USERPROFILE", "APPDATA", "XDG_CONFIG_HOME")
+	cmd.Env = append(cmd.Env,
+		"HOME="+isolatedHome,
+		"XDG_CONFIG_HOME="+isolatedHome,
+	)
+
+	out, err := cmd.CombinedOutput()
+	output := string(out)
+	if err != nil {
+		return output, fmt.Errorf("application templates command run failed: %w\n%s", err, output)
+	}
+
+	return output, nil
 }
 
 // catalogConfigureRunPTY runs 'catalog configure' via PTY with password prompts; shared by all configure variants.

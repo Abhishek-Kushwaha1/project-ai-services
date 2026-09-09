@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"time"
 
+	catalogutils "github.com/project-ai-services/ai-services/internal/pkg/catalog/utils"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	workerconstants "github.com/project-ai-services/ai-services/internal/pkg/worker/constants"
 )
@@ -54,11 +55,31 @@ func generateKeyAndCSR() (keyPEM, csrPEM []byte, err error) {
 }
 
 // loadClientCert loads the worker's mTLS key pair from tlsDir.
+// tls.key is stored encrypted; it is decrypted in memory before building the
+// tls.Certificate so the plaintext key is never written to disk unprotected.
 func loadClientCert(tlsDir string) (tls.Certificate, error) {
-	cert, err := tls.LoadX509KeyPair(
-		filepath.Join(tlsDir, tlsCertFile),
-		filepath.Join(tlsDir, tlsKeyFile),
-	)
+	secret := os.Getenv(workerconstants.MTLSEncryptionKeyEnv)
+	if secret == "" {
+		return tls.Certificate{}, fmt.Errorf("load mTLS credentials: %s is not set", workerconstants.MTLSEncryptionKeyEnv)
+	}
+
+	certPEMBytes, err := os.ReadFile(filepath.Join(tlsDir, tlsCertFile))
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("load mTLS credentials: read %s: %w", tlsCertFile, err)
+	}
+
+	keyEnc, err := os.ReadFile(filepath.Join(tlsDir, tlsKeyFile))
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("load mTLS credentials: read %s: %w", tlsKeyFile, err)
+	}
+
+	keyPEMStr, err := catalogutils.Decrypt(string(keyEnc), secret)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("load mTLS credentials: decrypt %s: %w", tlsKeyFile, err)
+	}
+	keyPEM := []byte(keyPEMStr)
+
+	cert, err := tls.X509KeyPair(certPEMBytes, keyPEM)
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("load mTLS credentials: %w", err)
 	}
@@ -66,9 +87,8 @@ func loadClientCert(tlsDir string) (tls.Certificate, error) {
 	return cert, nil
 }
 
-// buildTLSConfig returns a *tls.Config for dialing the gateway. When the target
-// includes a host or IP, we verify against that exact address. Otherwise we fall
-// back to the podman/internal default name.
+// buildTLSConfig returns a *tls.Config for dialing the gateway. The gateway
+// address must contain a DNS hostname so it can be verified against the server certificate SANs.
 func buildTLSConfig(gatewayAddr, tlsDir string, clientCert *tls.Certificate) (*tls.Config, error) {
 	cfg := &tls.Config{}
 	if clientCert != nil {
@@ -87,7 +107,11 @@ func buildTLSConfig(gatewayAddr, tlsDir string, clientCert *tls.Certificate) (*t
 			return nil, fmt.Errorf("parse ca.crt: no valid certificates found")
 		}
 		cfg.RootCAs = pool
-		cfg.ServerName = gatewayServerName(gatewayAddr)
+		serverName, err := gatewayServerName(gatewayAddr)
+		if err != nil {
+			return nil, err
+		}
+		cfg.ServerName = serverName
 	case os.IsNotExist(err):
 		cfg.InsecureSkipVerify = true //nolint:gosec // intentional TOFU bootstrap fallback
 	default:
@@ -97,37 +121,48 @@ func buildTLSConfig(gatewayAddr, tlsDir string, clientCert *tls.Certificate) (*t
 	return cfg, nil
 }
 
-func gatewayServerName(gatewayAddr string) string {
+func gatewayServerName(gatewayAddr string) (string, error) {
 	if gatewayAddr == "" {
-		return workerconstants.PodmanGatewayServerName
+		return "", fmt.Errorf("gateway address is empty")
 	}
 	if parsed, err := url.Parse(gatewayAddr); err == nil && parsed.Host != "" {
 		gatewayAddr = parsed.Host
 	}
-	if host, _, err := net.SplitHostPort(gatewayAddr); err == nil {
-		gatewayAddr = host
+	host, _, err := net.SplitHostPort(gatewayAddr)
+	if err != nil {
+		return "", fmt.Errorf("invalid gateway address %q: must be host:port", gatewayAddr)
 	}
-	if gatewayAddr == "" {
-		return workerconstants.PodmanGatewayServerName
+	if host == "" {
+		return "", fmt.Errorf("invalid gateway address %q: hostname is empty", gatewayAddr)
 	}
-	if ip := net.ParseIP(gatewayAddr); ip != nil {
-		return workerconstants.PodmanGatewayServerName
+	if net.ParseIP(host) != nil {
+		return "", fmt.Errorf("invalid gateway address %q: IP addresses are not supported", gatewayAddr)
 	}
 
-	return gatewayAddr
+	return host, nil
 }
 
-// writeTLSMaterial creates tlsDir (mode 0700) and writes the three PEM files
-// the worker needs for future mTLS dials: tls.crt (cert), tls.key (private key),
-// and ca.crt (gateway CA, used for server verification).
+// writeTLSMaterial creates tlsDir (mode 0700) and writes the three files the
+// worker needs for future mTLS dials: tls.crt (cert, plaintext PEM), tls.key
+// (private key, AES-256-GCM encrypted), and ca.crt (gateway CA, plaintext PEM).
 func writeTLSMaterial(dir string, certPEM, keyPEM, caCertPEM []byte) error {
+	secret := os.Getenv(workerconstants.MTLSEncryptionKeyEnv)
+	if secret == "" {
+		return fmt.Errorf("write TLS material: %s is not set", workerconstants.MTLSEncryptionKeyEnv)
+	}
+
+	keyEnc, err := catalogutils.Encrypt(string(keyPEM), secret)
+	if err != nil {
+		return fmt.Errorf("encrypt %s: %w", tlsKeyFile, err)
+	}
+
 	if err := os.MkdirAll(dir, dirPerm); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, tlsCertFile), certPEM, certPerm); err != nil {
 		return fmt.Errorf("write %s: %w", tlsCertFile, err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, tlsKeyFile), keyPEM, keyPerm); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, tlsKeyFile), []byte(keyEnc), keyPerm); err != nil {
 		return fmt.Errorf("write %s: %w", tlsKeyFile, err)
 	}
 	if len(caCertPEM) > 0 {
@@ -142,6 +177,7 @@ func writeTLSMaterial(dir string, certPEM, keyPEM, caCertPEM []byte) error {
 // workerNameFromCert reads the CN from the worker's client certificate in tlsDir.
 // This recovers the registered worker name on reconnect without any extra state file,
 // because the gateway embeds the token-bound worker name as the cert CN at registration time.
+// tls.crt is public material and stored in plaintext — no decryption needed here.
 func workerNameFromCert(tlsDir string) (string, error) {
 	certPEM, err := os.ReadFile(filepath.Join(tlsDir, tlsCertFile))
 	if err != nil {
@@ -164,14 +200,11 @@ func workerNameFromCert(tlsDir string) (string, error) {
 
 // hasValidTLSCredentials returns true when the on-disk credentials in tlsDir
 // are structurally valid and not expired:
-//  1. tls.crt + tls.key load without error.
+//  1. tls.crt + tls.key load without error (tls.key is decrypted in memory).
 //  2. The certificate has not yet expired.
 //  3. If ca.crt is present, the cert verifies against it (catches CA rotation).
 func hasValidTLSCredentials(ctx context.Context, tlsDir string) bool {
-	cert, err := tls.LoadX509KeyPair(
-		filepath.Join(tlsDir, tlsCertFile),
-		filepath.Join(tlsDir, tlsKeyFile),
-	)
+	cert, err := loadClientCert(tlsDir)
 	if err != nil {
 		return false
 	}

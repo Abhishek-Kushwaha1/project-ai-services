@@ -15,8 +15,10 @@ import (
 	"path/filepath"
 	"time"
 
+	catalogutils "github.com/project-ai-services/ai-services/internal/pkg/catalog/utils"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
+	"github.com/project-ai-services/ai-services/internal/pkg/utils"
 	workerconstants "github.com/project-ai-services/ai-services/internal/pkg/worker/constants"
 )
 
@@ -93,8 +95,9 @@ func generateCA() (*ecdsa.PrivateKey, *x509.Certificate, []byte, error) {
 }
 
 // generateServerCert creates a new ECDSA P-256 server key and signs it with the CA.
-// serverNames are the hostnames embedded as DNS SANs (must match what workers dial).
-func generateServerCert(caCert *x509.Certificate, caKey *ecdsa.PrivateKey, serverNames []string) (*ecdsa.PrivateKey, []byte, error) {
+// dnsNames is the list of DNS SANs embedded in the cert — must exactly match the
+// hostname(s) workers will use to dial the gateway.
+func generateServerCert(caCert *x509.Certificate, caKey *ecdsa.PrivateKey, dnsNames []string) (*ecdsa.PrivateKey, []byte, error) {
 	srvKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate server key: %w", err)
@@ -103,7 +106,7 @@ func generateServerCert(caCert *x509.Certificate, caKey *ecdsa.PrivateKey, serve
 	srvTemplate := &x509.Certificate{
 		SerialNumber: srvSerial,
 		Subject:      pkix.Name{CommonName: "Catalog"},
-		DNSNames:     serverNames,
+		DNSNames:     dnsNames,
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().Add(serverCertTTL),
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
@@ -117,25 +120,80 @@ func generateServerCert(caCert *x509.Certificate, caKey *ecdsa.PrivateKey, serve
 	return srvKey, srvCertDER, nil
 }
 
+// writePKIFiles encrypts the two private key PEMs and writes all four PKI files to pkiDir.
+func writePKIFiles(pkiDir string, caKeyPEM, caCertDER, srvKeyPEM, srvCertDER []byte, secret string) error {
+	caKeyEnc, err := catalogutils.Encrypt(string(caKeyPEM), secret)
+	if err != nil {
+		return fmt.Errorf("encrypt ca.key: %w", err)
+	}
+
+	srvKeyEnc, err := catalogutils.Encrypt(string(srvKeyPEM), secret)
+	if err != nil {
+		return fmt.Errorf("encrypt server.key: %w", err)
+	}
+
+	files := []struct {
+		path string
+		perm os.FileMode
+		data []byte
+	}{
+		{filepath.Join(pkiDir, "ca.key"), keyPerm, []byte(caKeyEnc)},
+		{filepath.Join(pkiDir, "ca.crt"), certPerm, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCertDER})},
+		{filepath.Join(pkiDir, "server.key"), keyPerm, []byte(srvKeyEnc)},
+		{filepath.Join(pkiDir, "server.crt"), certPerm, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srvCertDER})},
+	}
+	for _, f := range files {
+		if err := os.WriteFile(f.path, f.data, f.perm); err != nil {
+			return fmt.Errorf("write %s: %w", f.path, err)
+		}
+	}
+
+	return nil
+}
+
 // generateAndPersistPKI creates a new ECDSA P-256 root CA and signs a server
 // certificate, then writes all four PEM files to pkiDir.
 //
 // For OpenShift the server cert's DNS SANs include both the live passthrough
-// route host and the internal service endpoint. For Podman they include the
-// catalog pod name and the static internal name.
-func generateAndPersistPKI(ctx context.Context, pkiDir string, runtimeType types.RuntimeType) (pkiResult, error) {
-	empty := pkiResult{}
-
-	serverNames := []string{}
+// route host and the internal service endpoint. For Podman the SAN includes the
+// domain-derived gateway name.
+func serverCertDNSNames(ctx context.Context, runtimeType types.RuntimeType) ([]string, error) {
 	switch runtimeType {
 	case types.RuntimeTypeOpenShift:
 		route, err := GatewayRouteHost(ctx)
 		if err != nil {
-			return empty, fmt.Errorf("resolve gateway route host for cert SAN: %w", err)
+			return nil, fmt.Errorf("resolve gateway route host for cert SAN: %w", err)
 		}
-		serverNames = []string{route, workerconstants.OpenShiftGatewayServiceEndpoint}
+
+		return []string{route, workerconstants.OpenShiftGatewayServiceEndpoint}, nil
 	case types.RuntimeTypePodman:
-		serverNames = []string{workerconstants.PodmanGatewayServerName, workerconstants.PodmanGatewayPodName}
+		domainSuffix := utils.GetEnv("DOMAIN_SUFFIX", "")
+		if domainSuffix == "" {
+			return nil, fmt.Errorf("DOMAIN_SUFFIX environment variable not set — cannot generate gateway server cert")
+		}
+
+		return []string{
+			workerconstants.WorkerGatewayName + "." + domainSuffix,
+			workerconstants.PodmanGatewayPodName,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported runtime type %q for gateway PKI generation", runtimeType)
+	}
+}
+
+func generateAndPersistPKI(ctx context.Context, pkiDir string, runtimeType types.RuntimeType) (pkiResult, error) {
+	empty := pkiResult{}
+
+	dnsNames, err := serverCertDNSNames(ctx, runtimeType)
+	if err != nil {
+		return empty, err
+	}
+
+	logger.InfofCtx(ctx, "worker gateway: generating server cert with SANs: %v", dnsNames)
+
+	secret := os.Getenv(workerconstants.MTLSEncryptionKeyEnv)
+	if secret == "" {
+		return empty, fmt.Errorf("worker gateway: PKI encryption key: %s is not set", workerconstants.MTLSEncryptionKeyEnv)
 	}
 
 	if err := os.MkdirAll(pkiDir, dirPerm); err != nil {
@@ -147,7 +205,7 @@ func generateAndPersistPKI(ctx context.Context, pkiDir string, runtimeType types
 		return empty, err
 	}
 
-	srvKey, srvCertDER, err := generateServerCert(caCert, caKey, serverNames)
+	srvKey, srvCertDER, err := generateServerCert(caCert, caKey, dnsNames)
 	if err != nil {
 		return empty, err
 	}
@@ -155,26 +213,18 @@ func generateAndPersistPKI(ctx context.Context, pkiDir string, runtimeType types
 	caKeyDER, _ := x509.MarshalECPrivateKey(caKey)
 	srvKeyDER, _ := x509.MarshalECPrivateKey(srvKey)
 
-	files := []struct {
-		path string
-		perm os.FileMode
-		data []byte
-	}{
-		{filepath.Join(pkiDir, "ca.key"), keyPerm, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: caKeyDER})},
-		{filepath.Join(pkiDir, "ca.crt"), certPerm, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCertDER})},
-		{filepath.Join(pkiDir, "server.key"), keyPerm, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: srvKeyDER})},
-		{filepath.Join(pkiDir, "server.crt"), certPerm, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srvCertDER})},
+	caKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: caKeyDER})
+	srvKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: srvKeyDER})
+
+	if err := writePKIFiles(pkiDir, caKeyPEM, caCertDER, srvKeyPEM, srvCertDER, secret); err != nil {
+		return empty, err
 	}
-	for _, f := range files {
-		if err := os.WriteFile(f.path, f.data, f.perm); err != nil {
-			return empty, fmt.Errorf("write %s: %w", f.path, err)
-		}
-	}
+
 	logger.InfofCtx(ctx, "worker gateway: PKI generated and persisted to %s", pkiDir)
 
 	serverCert, err := tls.X509KeyPair(
 		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srvCertDER}),
-		pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: srvKeyDER}),
+		srvKeyPEM,
 	)
 	if err != nil {
 		return empty, fmt.Errorf("build server tls.Certificate: %w", err)
@@ -185,44 +235,81 @@ func generateAndPersistPKI(ctx context.Context, pkiDir string, runtimeType types
 	return pkiResult{caCert: caCert, caKey: caKey, serverCert: serverCert, caCertPool: pool}, nil
 }
 
-// loadPKI reads all four PKI files from disk and returns the parsed material.
-func loadPKI(caCrtPath, caKeyPath, srvCrtPath, srvKeyPath string) (pkiResult, error) {
-	empty := pkiResult{}
-
+// loadCAMaterial reads and decrypts ca.crt + ca.key, returning the parsed certificate and key.
+func loadCAMaterial(caCrtPath, caKeyPath, secret string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 	caCertPEM, err := os.ReadFile(caCrtPath)
 	if err != nil {
-		return empty, fmt.Errorf("read %s: %w", caCrtPath, err)
+		return nil, nil, fmt.Errorf("read %s: %w", caCrtPath, err)
 	}
 	block, _ := pem.Decode(caCertPEM)
 	if block == nil {
-		return empty, fmt.Errorf("decode %s: not valid PEM", caCrtPath)
+		return nil, nil, fmt.Errorf("decode %s: not valid PEM", caCrtPath)
 	}
 	caCert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return empty, fmt.Errorf("parse %s: %w", caCrtPath, err)
+		return nil, nil, fmt.Errorf("parse %s: %w", caCrtPath, err)
 	}
 
-	caKeyPEM, err := os.ReadFile(caKeyPath)
+	caKeyEnc, err := os.ReadFile(caKeyPath)
 	if err != nil {
-		return empty, fmt.Errorf("read %s: %w", caKeyPath, err)
+		return nil, nil, fmt.Errorf("read %s: %w", caKeyPath, err)
 	}
-	keyBlock, _ := pem.Decode(caKeyPEM)
+	caKeyPEMStr, err := catalogutils.Decrypt(string(caKeyEnc), secret)
+	if err != nil {
+		return nil, nil, fmt.Errorf("decrypt %s: %w", caKeyPath, err)
+	}
+	keyBlock, _ := pem.Decode([]byte(caKeyPEMStr))
 	if keyBlock == nil {
-		return empty, fmt.Errorf("decode %s: not valid PEM", caKeyPath)
+		return nil, nil, fmt.Errorf("decode %s: not valid PEM after decryption", caKeyPath)
 	}
 	caKey, err := x509.ParseECPrivateKey(keyBlock.Bytes)
 	if err != nil {
-		return empty, fmt.Errorf("parse %s: %w", caKeyPath, err)
+		return nil, nil, fmt.Errorf("parse %s: %w", caKeyPath, err)
+	}
+
+	return caCert, caKey, nil
+}
+
+// loadServerKeyPEM reads and decrypts server.key, returning the plaintext PEM bytes.
+func loadServerKeyPEM(srvKeyPath, secret string) ([]byte, error) {
+	srvKeyEnc, err := os.ReadFile(srvKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", srvKeyPath, err)
+	}
+	srvKeyPEMStr, err := catalogutils.Decrypt(string(srvKeyEnc), secret)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt %s: %w", srvKeyPath, err)
+	}
+
+	return []byte(srvKeyPEMStr), nil
+}
+
+// loadPKI reads all four PKI files from disk and returns the parsed material.
+// ca.key and server.key are decrypted using the MTLS_ENCRYPTION_KEY env var
+// before being parsed.
+func loadPKI(caCrtPath, caKeyPath, srvCrtPath, srvKeyPath string) (pkiResult, error) {
+	empty := pkiResult{}
+
+	secret := os.Getenv(workerconstants.MTLSEncryptionKeyEnv)
+	if secret == "" {
+		return empty, fmt.Errorf("worker gateway: PKI decryption key: %s is not set", workerconstants.MTLSEncryptionKeyEnv)
+	}
+
+	caCert, caKey, err := loadCAMaterial(caCrtPath, caKeyPath, secret)
+	if err != nil {
+		return empty, err
 	}
 
 	srvCertPEM, err := os.ReadFile(srvCrtPath)
 	if err != nil {
 		return empty, fmt.Errorf("read %s: %w", srvCrtPath, err)
 	}
-	srvKeyPEM, err := os.ReadFile(srvKeyPath)
+
+	srvKeyPEM, err := loadServerKeyPEM(srvKeyPath, secret)
 	if err != nil {
-		return empty, fmt.Errorf("read %s: %w", srvKeyPath, err)
+		return empty, err
 	}
+
 	serverCert, err := tls.X509KeyPair(srvCertPEM, srvKeyPEM)
 	if err != nil {
 		return empty, fmt.Errorf("load server key pair: %w", err)

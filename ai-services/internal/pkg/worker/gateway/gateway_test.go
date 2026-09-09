@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/db/models"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/db/repository"
+	workerconstants "github.com/project-ai-services/ai-services/internal/pkg/worker/constants"
 	workerpb "github.com/project-ai-services/ai-services/internal/pkg/worker/proto"
 	"github.com/project-ai-services/ai-services/internal/pkg/worker/registry"
 	"google.golang.org/grpc"
@@ -461,5 +462,76 @@ func TestGateway_CommandStream_Disconnect(t *testing.T) {
 
 	if _, ok := reg.Get("worker-4"); ok {
 		t.Error("expected worker-4 to be removed from registry after disconnect")
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// PKI / SAN tests
+// ──────────────────────────────────────────────────────────────────────────────
+
+func TestGenerateServerCert_MultiSAN(t *testing.T) {
+	caKey, caCert, _, err := generateCA()
+	if err != nil {
+		t.Fatalf("generateCA: %v", err)
+	}
+
+	sans := []string{"catalog-worker-gateway.example.com"}
+	_, certDER, err := generateServerCert(caCert, caKey, sans)
+	if err != nil {
+		t.Fatalf("generateServerCert: %v", err)
+	}
+
+	parsed, err := x509.ParseCertificate(certDER)
+	if err != nil {
+		t.Fatalf("ParseCertificate: %v", err)
+	}
+
+	got := make(map[string]bool, len(parsed.DNSNames))
+	for _, n := range parsed.DNSNames {
+		got[n] = true
+	}
+	for _, want := range sans {
+		if !got[want] {
+			t.Errorf("expected SAN %q in cert, got DNSNames=%v", want, parsed.DNSNames)
+		}
+	}
+}
+
+func TestGenerateAndPersistPKI_PodmanSANs(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DOMAIN_SUFFIX", "example.com")
+	t.Setenv(workerconstants.MTLSEncryptionKeyEnv, "test-mtls-secret")
+
+	res, err := generateAndPersistPKI(t.Context(), dir, "podman")
+	if err != nil {
+		t.Fatalf("generateAndPersistPKI: %v", err)
+	}
+
+	leaf, err := x509.ParseCertificate(res.serverCert.Certificate[0])
+	if err != nil {
+		t.Fatalf("ParseCertificate: %v", err)
+	}
+
+	expectedSANs := []string{"catalog-worker-gateway.example.com", workerconstants.PodmanGatewayPodName}
+	if len(leaf.DNSNames) != len(expectedSANs) || leaf.DNSNames[0] != expectedSANs[0] || leaf.DNSNames[1] != expectedSANs[1] {
+		t.Errorf("expected SANs %v; got DNSNames=%v", expectedSANs, leaf.DNSNames)
+	}
+}
+
+func TestGenerateAndPersistPKI_PodmanNoDomain(t *testing.T) {
+	t.Setenv("DOMAIN_SUFFIX", "")
+
+	_, err := generateAndPersistPKI(t.Context(), t.TempDir(), "podman")
+	if err == nil {
+		t.Fatal("expected error when DOMAIN_SUFFIX is unset, got nil")
+	}
+}
+
+func TestGenerateAndPersistPKI_UnknownRuntime(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := generateAndPersistPKI(t.Context(), dir, "unknown")
+	if err == nil {
+		t.Fatal("expected error for unsupported runtime type, got nil")
 	}
 }

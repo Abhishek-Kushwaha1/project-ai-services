@@ -10,7 +10,7 @@ const (
 	OperatorPollTimeout  = 3 * time.Minute
 
 	// HelmTimeout is the default timeout for a Helm install/upgrade operation.
-	HelmTimeout = 10 * time.Minute
+	HelmTimeout = 20 * time.Minute
 	// HelmUninstallTimeout is the default timeout for a Helm uninstall operation.
 	HelmUninstallTimeout = 5 * time.Minute
 	// PredictorWaitTimeout is the maximum time to wait for a KServe InferenceService
@@ -117,4 +117,17 @@ const (
 	PodmanAuthSecret = "podman-auth-secret"
 	// VolumeLabel represents the volume name associated with Pod.
 	VolumeLabel = "ai-services.io/volume"
+	// VolumeSkipLabel represents volumes associated with pod should be skipped while deletion.
+	VolumeSkipLabel = "ai-services.io/volume-skip-cleanup"
+	// SecretLabel represents the secret name associated with Pod.
+	SecretLabel = "ai-services.io/secret"
+	// SecretSkipLabel represents if secret associated with pod should be skipped while deletion.
+	SecretSkipLabel = "ai-services.io/secret-skip-cleanup"
+)
+
+const (
+	ArgParamCaddyHTTPSPort     = "caddy.httpsPort"
+	ArgParamCaddyFileContent   = "caddy.caddyFileContent"
+	ArgParamSSLCertFileContent = "caddy.sslCertContent"
+	ArgParamSSLKeyFileContent  = "caddy.sslKeyContent"
 )

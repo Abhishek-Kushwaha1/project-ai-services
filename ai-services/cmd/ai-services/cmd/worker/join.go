@@ -12,6 +12,7 @@ import (
 	cmdcommon "github.com/project-ai-services/ai-services/cmd/ai-services/cmd/common"
 	catalogUtils "github.com/project-ai-services/ai-services/internal/pkg/catalog/utils"
 	"github.com/project-ai-services/ai-services/internal/pkg/constants"
+	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 	"github.com/project-ai-services/ai-services/internal/pkg/utils"
@@ -205,7 +206,7 @@ func joinRunE(cmd *cobra.Command, args []string) error {
 
 		// Setup worker node
 		if err := workerpodman.DeployWorker(ctx, opts); err != nil {
-			return fmt.Errorf("worker join: setup: %w", err)
+			return fmt.Errorf("failed to deploy worker: %w", err)
 		}
 	case types.RuntimeTypeOpenShift:
 		opts := workertypes.OpenshiftWorkerOptions{
@@ -218,7 +219,7 @@ func joinRunE(cmd *cobra.Command, args []string) error {
 			},
 		}
 		if err := workeropenshift.DeployWorker(ctx, opts); err != nil {
-			return fmt.Errorf("worker join: failed to install worker helm chart: %w", err)
+			return fmt.Errorf("failed to deploy worker: %w", err)
 		}
 	default:
 		return fmt.Errorf("unsupported runtime type: %s", runtimeType)
@@ -343,7 +344,14 @@ func grpcStreamRunE(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	return join.StartGrpcStream(ctx, rt, pr, opts)
+	err := join.StartGrpcStream(ctx, rt, pr, opts)
+	if err != nil {
+		logger.ErrorfCtx(ctx, "%s: %v\n", workerconstants.WorkerJoinErr, err)
+
+		return fmt.Errorf("%s: %w", workerconstants.WorkerJoinErr, err)
+	}
+
+	return nil
 }
 
 func newGrpcStreamCmd() *cobra.Command {

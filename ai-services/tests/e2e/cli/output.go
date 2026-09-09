@@ -533,6 +533,44 @@ func GetApplicationNameFromPSOutput(psOutput string) (appName string) {
 	return ""
 }
 
+// GetAllApplicationNamesFromPSOutput returns all unique application names found
+// in the 'application ps' output. The PS table format is:
+//
+//	APPLICATION NAME  POD NAME  STATUS  ...
+//	----------------  --------  ------
+//	my-app            pod-a     Running
+//	my-app            pod-b     Running
+//	other-app         pod-c     Running
+//
+// Data rows start at index 2 (after the header and separator lines).
+// The application name is always the first whitespace-separated field.
+func GetAllApplicationNamesFromPSOutput(psOutput string) []string {
+	seen := make(map[string]bool)
+	var names []string
+
+	lines := strings.Split(psOutput, "\n")
+	// Skip header (index 0) and separator (index 1); data starts at index 2.
+	for _, line := range lines[2:] {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		parts := strings.Fields(line)
+		if len(parts) == 0 {
+			continue
+		}
+
+		name := parts[0]
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+
+	return names
+}
+
 // ValidateOpenShiftRoutes validates that all required routes are present.
 func ValidateOpenShiftRoutes(output string) error {
 	requiredRoutes := []string{

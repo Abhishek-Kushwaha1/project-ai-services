@@ -332,11 +332,11 @@ var _ = ginkgo.BeforeSuite(func() {
 
 	ginkgo.By("Logging in to catalog API server (if already running)")
 	if providedAppName != "" {
-		// Existing app: catalog is already running ΓÇö login is required before any CLI call.
+		// Existing app: catalog is already running — login is required before any CLI call.
 		// Fatal so a missing CATALOG_PASSWORD surfaces immediately with a clear message.
 		catalogLoginWithDiscovery(ctx, true)
 	} else {
-		// Fresh run: catalog may not be running yet ΓÇö non-fatal, login happens again before 'application create'.
+		// Fresh run: catalog may not be running yet — non-fatal, login happens again before 'application create'.
 		catalogLoginWithDiscovery(ctx, false)
 	}
 
@@ -372,25 +372,64 @@ var _ = ginkgo.BeforeSuite(func() {
 		logger.Infoln("[SETUP] Podman environment verified")
 	}
 
-	ginkgo.By("Checking if existing app needs to be deleted")
-	if deleteExistingApp {
-		// Non-fatal if ApplicationPS fails ΓÇö catalog may not be running yet.
-		psOutput, psErr := cli.ApplicationPS(ctx, cfg, "", appRuntime)
-		if psErr != nil {
-			logger.Warningf("[SETUP] [WARNING] --delete-app: ApplicationPS failed (non-fatal, catalog may not be running yet): %v", psErr)
+	// Always perform a full pre-run cleanup before the suite starts.
+	// This ensures the environment is completely fresh regardless of what
+	// a previous run left behind.
+	//
+	// Flow:
+	//   1. Run 'catalog info' — if catalog is not running, nothing to clean up.
+	//   2. If catalog IS running: log in, delete all existing applications,
+	//      then uninstall the catalog service itself.
+	//   3. The explicit --delete-app flag is kept for backwards compat but is
+	//      now superseded by this always-on cleanup.
+	ginkgo.By("Cleaning up any applications and catalog left over from a previous run")
+	{
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cleanupCancel()
+
+		_, catalogInfoErr := cli.CatalogInfo(cleanupCtx, cfg, appRuntime)
+		if catalogInfoErr != nil {
+			logger.Infof("[SETUP] Pre-run cleanup: catalog is not running — nothing to clean up")
 		} else {
-			deleteAppName := cli.GetApplicationNameFromPSOutput(psOutput)
-			if deleteAppName != "" {
-				_, err := cli.DeleteAppSkipCleanup(ctx, cfg, deleteAppName, appRuntime)
-				if err != nil {
-					logger.Errorf("Error deleting existing app: %s", deleteAppName)
-					ginkgo.Fail("Existing application could not be deleted")
-				}
-				logger.Infof("[SETUP] Deleted existing app: %s", deleteAppName)
+			logger.Infoln("[SETUP] Pre-run cleanup: catalog is running — starting cleanup")
+
+			// Step 1: Log in so subsequent CLI calls have a valid session.
+			catalogLoginWithDiscovery(cleanupCtx, false)
+
+			// Step 2: Delete all running applications.
+			psOutput, psErr := cli.ApplicationPS(cleanupCtx, cfg, "", appRuntime)
+			if psErr != nil {
+				logger.Warningf("[SETUP] Pre-run cleanup: 'application ps' failed (non-fatal): %v", psErr)
 			} else {
-				logger.Infof("[SETUP] No existing application found to delete")
+				existingApps := cli.GetAllApplicationNamesFromPSOutput(psOutput)
+				if len(existingApps) == 0 {
+					logger.Infoln("[SETUP] Pre-run cleanup: no existing applications found")
+				} else {
+					logger.Infof("[SETUP] Pre-run cleanup: found %d application(s) to delete: %v", len(existingApps), existingApps)
+					for _, existingApp := range existingApps {
+						logger.Infof("[SETUP] Pre-run cleanup: deleting application %q", existingApp)
+						if _, delErr := cli.DeleteAppSkipCleanup(cleanupCtx, cfg, existingApp, appRuntime); delErr != nil {
+							logger.Warningf("[SETUP] Pre-run cleanup: failed to delete application %q (non-fatal): %v", existingApp, delErr)
+						} else {
+							logger.Infof("[SETUP] Pre-run cleanup: deleted application %q", existingApp)
+						}
+					}
+				}
+			}
+
+			// Step 3: Uninstall the catalog service itself.
+			logger.Infoln("[SETUP] Pre-run cleanup: uninstalling catalog service")
+			if _, uninstallErr := cli.CatalogUninstall(cleanupCtx, cfg, appRuntime); uninstallErr != nil {
+				logger.Warningf("[SETUP] Pre-run cleanup: catalog uninstall failed (non-fatal): %v", uninstallErr)
+			} else {
+				logger.Infoln("[SETUP] Pre-run cleanup: catalog service uninstalled successfully")
 			}
 		}
+	}
+
+	// Legacy explicit --delete-app flag: also handled above, kept for compat.
+	if deleteExistingApp {
+		logger.Infoln("[SETUP] --delete-app flag set (pre-run cleanup already ran above)")
 	}
 
 	logger.Infoln("[SETUP] ================================================")

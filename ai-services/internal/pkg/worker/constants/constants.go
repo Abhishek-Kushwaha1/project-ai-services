@@ -13,6 +13,11 @@ const (
 	// WorkerPodLabel is the pod label set to identify worker pod deployed or not.
 	WorkerPodLabel = "ai-services.io/component=worker"
 
+	// CatalogBackendPodLabel is the label key used to identify the catalog-backend pod on OpenShift.
+	CatalogBackendPodLabel = "ai-services.io/component"
+	// CatalogBackendPodLabelValue is the label value for the catalog-backend pod.
+	CatalogBackendPodLabelValue = "catalog-backend"
+
 	// WorkerDataSubDir is the on-disk subtree written by deploy.Setup; removed by uninstall.
 	WorkerDataSubDir = "worker"
 
@@ -69,6 +74,10 @@ const (
 	// PodmanGatewayPodName is the Podman catalog pod DNS name embedded in the
 	// auto-generated gateway server certificate.
 	PodmanGatewayPodName = "ai-services--catalog"
+
+	// OpenShiftCatalogPodName is the pod name prefix used by the catalog-backend
+	// Deployment on OpenShift.
+	OpenShiftCatalogPodName = "catalog-backend"
 
 	// OpenShiftGatewayServiceEndpoint is the OpenShift service DNS name embedded in the
 	// auto-generated gateway server certificate for internal cluster communication.

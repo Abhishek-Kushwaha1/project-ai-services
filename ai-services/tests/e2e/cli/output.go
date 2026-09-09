@@ -517,11 +517,15 @@ func ValidateApplicationLogs(output, _, _ string) error {
 	})
 }
 
+// psMinDataLines is the minimum number of lines a valid 'application ps' table
+// must have: one header line, one separator line, and at least one data row.
+const psMinDataLines = 3
+
 func GetApplicationNameFromPSOutput(psOutput string) (appName string) {
 	lines := strings.Split(psOutput, "\n")
 	// lines[0] = header, lines[1] = separator, lines[2] = first data row.
 	// Guard against output that has no data rows (no app running).
-	if len(lines) < 3 {
+	if len(lines) < psMinDataLines {
 		return ""
 	}
 

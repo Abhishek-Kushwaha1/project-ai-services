@@ -167,7 +167,7 @@ func waitForSummarizeURL(logPrefix string, timeout time.Duration) string {
 				"[%s] Timed out waiting for summarize-api URL in 'application info' for app %q.\nLast output:\n%s",
 				logPrefix, appName, infoOutput))
 		}
-		logger.Infof("[%s] summarize-api URL not yet present ΓÇö retrying in %s", logPrefix, pollInterval)
+		logger.Infof("[%s] summarize-api URL not yet present - retrying in %s", logPrefix, pollInterval)
 		select {
 		case <-pollCtx.Done():
 			ginkgo.Fail(fmt.Sprintf("[%s] Timed out waiting for summarize-api URL for app %q", logPrefix, appName))
@@ -192,10 +192,10 @@ func waitForSummarizeHealthy(logPrefix, baseURL string, timeout time.Duration) {
 		} else {
 			if healthCtx.Err() != nil {
 				ginkgo.Fail(fmt.Sprintf(
-					"[%s] Timed out waiting for summarize-api to become healthy at %s ΓÇö last error: %v",
+					"[%s] Timed out waiting for summarize-api to become healthy at %s - last error: %v",
 					logPrefix, baseURL, err))
 			}
-			logger.Infof("[%s] summarize-api not yet healthy (%v) ΓÇö retrying in %s", logPrefix, err, pollInterval)
+			logger.Infof("[%s] summarize-api not yet healthy (%v) - retrying in %s", logPrefix, err, pollInterval)
 			select {
 			case <-healthCtx.Done():
 				ginkgo.Fail(fmt.Sprintf("[%s] Timed out waiting for summarize-api to become healthy at %s", logPrefix, baseURL))
@@ -223,7 +223,7 @@ func catalogLoginWithDiscovery(loginCtx context.Context, fatal bool) {
 		}
 	}
 	if serverURL == "" || loginUsername == "" {
-		logger.Warningf("[TEST] Skipping catalog login ΓÇö server URL or credentials not available")
+		logger.Warningf("[TEST] Skipping catalog login - server URL or credentials not available")
 
 		return
 	}
@@ -313,9 +313,9 @@ var _ = ginkgo.BeforeSuite(func() {
 	ginkgo.By("Loading application create params from environment")
 	createParams = bootstrap.GetCreateParams()
 	if createParams != "" {
-		logger.Infof("[SETUP] CREATE_PARAMS set ΓÇö application create will use: --params %q", createParams)
+		logger.Infof("[SETUP] CREATE_PARAMS set - application create will use: --params %q", createParams)
 	} else {
-		logger.Infof("[SETUP] CREATE_PARAMS not set ΓÇö application create will use default template params")
+		logger.Infof("[SETUP] CREATE_PARAMS not set - application create will use default template params")
 	}
 
 	ginkgo.By("Building or verifying ai-services CLI")
@@ -499,7 +499,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			}
 			catalogPassword := bootstrap.GetCatalogAdminPassword()
 			if catalogPassword == "" {
-				ginkgo.Skip("CATALOG_PASSWORD not set ΓÇö skipping catalog hashpw test")
+				ginkgo.Skip("CATALOG_PASSWORD not set - skipping catalog hashpw test")
 			}
 			output, err := cli.CatalogHashpw(ctx, cfg, catalogPassword, appRuntime)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -516,7 +516,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 	ginkgo.Context("Bootstrap Steps", func() {
 		ginkgo.It("runs bootstrap configure", ginkgo.Label("spyre-dependent", "summarization-tests"), func() {
 			if providedAppName != "" {
-				ginkgo.Skip("Skipping bootstrap configure ΓÇö using existing application")
+				ginkgo.Skip("Skipping bootstrap configure - using existing application")
 			}
 			output, err := cli.BootstrapConfigure(ctx, cfg, appRuntime)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -524,7 +524,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 		})
 		ginkgo.It("runs bootstrap validate", ginkgo.Label("spyre-dependent", "summarization-tests"), func() {
 			if providedAppName != "" {
-				ginkgo.Skip("Skipping bootstrap validate ΓÇö using existing application")
+				ginkgo.Skip("Skipping bootstrap validate - using existing application")
 			}
 			output, err := cli.BootstrapValidate(ctx, cfg, appRuntime)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -532,7 +532,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 		})
 		ginkgo.It("runs full bootstrap", ginkgo.Label("spyre-dependent", "summarization-tests"), func() {
 			if providedAppName != "" {
-				ginkgo.Skip("Skipping full bootstrap ΓÇö using existing application")
+				ginkgo.Skip("Skipping full bootstrap - using existing application")
 			}
 			output, err := cli.Bootstrap(ctx, cfg, appRuntime)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -540,7 +540,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 		})
 		ginkgo.It("ensures catalog service is running", ginkgo.Label("spyre-dependent", "summarization-tests"), func() {
 			if providedAppName != "" {
-				ginkgo.Skip("Skipping catalog configure ΓÇö using existing application")
+				ginkgo.Skip("Skipping catalog configure - using existing application")
 			}
 			if appRuntime != "podman" { //nolint:dupl
 				ginkgo.Skip("catalog configure only supported for podman runtime")
@@ -564,7 +564,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 		})
 		ginkgo.It("verifies catalog info output", ginkgo.Label("spyre-dependent", "summarization-tests"), func() {
 			if providedAppName != "" {
-				ginkgo.Skip("Skipping catalog info ΓÇö using existing application")
+				ginkgo.Skip("Skipping catalog info - using existing application")
 			}
 			if appRuntime != "podman" {
 				ginkgo.Skip("catalog info only supported for podman runtime")
@@ -575,7 +575,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(cli.ValidateCatalogInfoOutput(output)).To(gomega.Succeed())
 
-			// Assert the catalog API server is actually reachable ΓÇö not just that its
+			// Assert the catalog API server is actually reachable - not just that its
 			// URL appears in the 'catalog info' text output.
 			backendURL := cli.ExtractCatalogBackendURL(output)
 			if backendURL != "" {
@@ -599,7 +599,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 		})
 		ginkgo.It("verifies catalog login", ginkgo.Label("spyre-dependent", "summarization-tests", "catalog-login"), func() {
 			if providedAppName != "" {
-				ginkgo.Skip("Skipping catalog login ΓÇö using existing application")
+				ginkgo.Skip("Skipping catalog login - using existing application")
 			}
 			if appRuntime != "podman" {
 				ginkgo.Skip("catalog login only supported for podman runtime")
@@ -607,10 +607,10 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			_, catalogUsername, catalogPassword := bootstrap.GetCatalogCreds()
 			catalogInsecure := bootstrap.GetCatalogInsecure()
 			if catalogBackendURL == "" {
-				ginkgo.Skip("catalogBackendURL not set ΓÇö skipping catalog login test")
+				ginkgo.Skip("catalogBackendURL not set - skipping catalog login test")
 			}
 			if catalogPassword == "" {
-				ginkgo.Skip("CATALOG_PASSWORD not set ΓÇö skipping catalog login test")
+				ginkgo.Skip("CATALOG_PASSWORD not set - skipping catalog login test")
 			}
 			ctx, cancel := withTimeout(1 * time.Minute)
 			defer cancel()
@@ -621,17 +621,17 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 		})
 		ginkgo.It("verifies catalog whoami after login", ginkgo.Label("spyre-dependent", "summarization-tests"), func() {
 			if providedAppName != "" {
-				ginkgo.Skip("Skipping catalog whoami ΓÇö using existing application")
+				ginkgo.Skip("Skipping catalog whoami - using existing application")
 			}
 			if appRuntime != "podman" {
 				ginkgo.Skip("catalog whoami only supported for podman runtime")
 			}
 			if catalogBackendURL == "" {
-				ginkgo.Skip("catalogBackendURL not set ΓÇö skipping catalog whoami test")
+				ginkgo.Skip("catalogBackendURL not set - skipping catalog whoami test")
 			}
 			_, _, catalogPassword := bootstrap.GetCatalogCreds()
 			if catalogPassword == "" {
-				ginkgo.Skip("CATALOG_PASSWORD not set ΓÇö skipping catalog whoami test")
+				ginkgo.Skip("CATALOG_PASSWORD not set - skipping catalog whoami test")
 			}
 			ctx, cancel := withTimeout(1 * time.Minute)
 			defer cancel()
@@ -642,7 +642,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 		})
 		ginkgo.It("verifies catalog logout invalidates session", ginkgo.Label("spyre-dependent", "summarization-tests", "catalog-logout"), func() {
 			if providedAppName != "" {
-				ginkgo.Skip("Skipping catalog logout ΓÇö using existing application")
+				ginkgo.Skip("Skipping catalog logout - using existing application")
 			}
 			if appRuntime != "podman" {
 				ginkgo.Skip("catalog logout only supported for podman runtime")
@@ -650,10 +650,10 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			_, catalogUsername, catalogPassword := bootstrap.GetCatalogCreds()
 			catalogInsecure := bootstrap.GetCatalogInsecure()
 			if catalogBackendURL == "" {
-				ginkgo.Skip("catalogBackendURL not set ΓÇö skipping catalog logout test")
+				ginkgo.Skip("catalogBackendURL not set - skipping catalog logout test")
 			}
 			if catalogPassword == "" {
-				ginkgo.Skip("CATALOG_PASSWORD not set ΓÇö skipping catalog logout test")
+				ginkgo.Skip("CATALOG_PASSWORD not set - skipping catalog logout test")
 			}
 
 			ctx, cancel := withTimeout(2 * time.Minute)
@@ -668,7 +668,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 
 			_, whoamiErr := cli.CatalogWhoami(ctx, cfg, appRuntime)
 			gomega.Expect(whoamiErr).To(gomega.HaveOccurred(), "whoami should fail after logout but succeeded")
-			logger.Infoln("[TEST] Catalog logout invalidated session ΓÇö whoami correctly rejected")
+			logger.Infoln("[TEST] Catalog logout invalidated session - whoami correctly rejected")
 
 			// Re-login so downstream specs retain a valid session.
 			_, err = cli.CatalogLogin(ctx, cfg, catalogBackendURL, catalogUsername, catalogPassword, appRuntime, catalogInsecure)
@@ -693,15 +693,15 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 
 		ginkgo.It("lists images for rag template", ginkgo.Label("spyre-independent", "summarization-tests"), func() {
 			// TODO: investigate HTTP 401 token revoked after catalog logout/re-login cycle
-			ginkgo.Skip("Skipping image list ΓÇö token revocation issue under investigation")
+			ginkgo.Skip("Skipping image list - token revocation issue under investigation")
 		})
 		ginkgo.It("pulls images for rag template", ginkgo.Label("spyre-independent", "summarization-tests"), func() {
 			// TODO: investigate HTTP 401 token revoked after catalog logout/re-login cycle
-			ginkgo.Skip("Skipping image pull ΓÇö token revocation issue under investigation")
+			ginkgo.Skip("Skipping image pull - token revocation issue under investigation")
 		})
 		ginkgo.It("verifies application model download command", ginkgo.Label("spyre-independent", "summarization-tests"), func() {
 			if providedAppName != "" {
-				ginkgo.Skip("Skipping model download ΓÇö using existing application")
+				ginkgo.Skip("Skipping model download - using existing application")
 			}
 			ctx, cancel := withTimeout(30 * time.Minute)
 			defer cancel()
@@ -735,13 +735,13 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					logger.Infof("[TEST] Using existing digitize application: %s", appName)
 				}
 
-				ginkgo.Skip("Skipping creation ΓÇö using existing application")
+				ginkgo.Skip("Skipping creation - using existing application")
 			}
 
 			ctx, cancel := withTimeout(45 * time.Minute)
 			defer cancel()
 
-			// Refresh the catalog token before create ΓÇö the 15-min TTL may have elapsed.
+			// Refresh the catalog token before create - the 15-min TTL may have elapsed.
 			catalogLoginWithDiscovery(ctx, true)
 
 			cliOptions := cli.CreateOptions{
@@ -803,7 +803,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 	ginkgo.Context("Application Observability", func() {
 		ginkgo.BeforeEach(func() {
 			if providedAppName != "" {
-				ginkgo.Skip("Skipping observability specs ΓÇö using existing application")
+				ginkgo.Skip("Skipping observability specs - using existing application")
 			}
 		})
 		ginkgo.It("verifies application ps output", ginkgo.Label("spyre-dependent", "summarization-tests"), func() {
@@ -847,7 +847,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 				gomega.Expect(cli.ValidateOpenShiftRoutes(output)).NotTo(gomega.HaveOccurred(), "Verify exposed ports/routes failed")
 			} else {
-				// Podman: Caddy routes by domain ΓÇö no numbered ports to verify.
+				// Podman: Caddy routes by domain - no numbered ports to verify.
 				logger.Infof("[TEST] Podman catalog path: skipping numeric port check (Caddy routes by domain)")
 			}
 			logger.Infof("[TEST] Exposed ports/routes verified")
@@ -884,7 +884,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 	ginkgo.Context("Runtime Operations", func() {
 		ginkgo.It("stops the application", ginkgo.Label("spyre-dependent", "summarization-tests"), func() {
 			if templateName == "summarize" {
-				ginkgo.Skip("Skipping stop/start for summarize template ΓÇö LLM reload would delay summarization tests")
+				ginkgo.Skip("Skipping stop/start for summarize template - LLM reload would delay summarization tests")
 			}
 			ctx, cancel := withTimeout(10 * time.Minute)
 			defer cancel()
@@ -920,7 +920,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 		})
 		ginkgo.It("starts application pods", ginkgo.Label("spyre-dependent", "summarization-tests"), func() {
 			if templateName == "summarize" {
-				ginkgo.Skip("Skipping stop/start for summarize template ΓÇö LLM reload would delay summarization tests")
+				ginkgo.Skip("Skipping stop/start for summarize template - LLM reload would delay summarization tests")
 			}
 			ctx, cancel := withTimeout(10 * time.Minute)
 			defer cancel()
@@ -950,13 +950,13 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				ginkgo.Fail("Application name is not set")
 			}
 
-			// Skip if LLM-as-Judge env vars are not set ΓÇö judge is optional.
+			// Skip if LLM-as-Judge env vars are not set - judge is optional.
 			llmJudgeImage := os.Getenv("LLM_JUDGE_IMAGE")
 			llmJudgeModelPath := os.Getenv("LLM_JUDGE_MODEL_PATH")
 			llmJudgeModel := os.Getenv("LLM_JUDGE_MODEL")
 			if llmJudgeImage == "" || llmJudgeModelPath == "" || llmJudgeModel == "" {
 				ginkgo.Skip(fmt.Sprintf(
-					"Skipping RAG Golden Dataset Validation ΓÇö LLM-as-Judge not configured "+
+					"Skipping RAG Golden Dataset Validation - LLM-as-Judge not configured "+
 						"(LLM_JUDGE_IMAGE=%q, LLM_JUDGE_MODEL_PATH=%q, LLM_JUDGE_MODEL=%q). "+
 						"Set all three env vars to enable this context.",
 					llmJudgeImage, llmJudgeModelPath, llmJudgeModel,
@@ -966,12 +966,12 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			logger.Infof("[RAG] Setting golden dataset path")
 			goldenDatasetFile = bootstrap.GetGoldenDatasetFile()
 			if goldenDatasetFile == "" {
-				ginkgo.Skip("Skipping RAG Golden Dataset Validation ΓÇö GOLDEN_DATASET_FILE environment variable is not set")
+				ginkgo.Skip("Skipping RAG Golden Dataset Validation - GOLDEN_DATASET_FILE environment variable is not set")
 			}
 
 			_, filename, _, ok := runtime.Caller(0)
 			if !ok {
-				ginkgo.Fail("runtime.Caller failed ΓÇö cannot determine test file path")
+				ginkgo.Fail("runtime.Caller failed - cannot determine test file path")
 			}
 			e2eDir := filepath.Dir(filename)                              // resolves ai-services/tests/e2e
 			repoRoot := filepath.Clean(filepath.Join(e2eDir, "../../..")) // navigates to the workspace root
@@ -1002,28 +1002,28 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 
 			similarityBaseURL := cli.ExtractSimilarityAPIURL(infoOutput)
 			if similarityBaseURL == "" {
-				ginkgo.Fail("[RAG] similarity-api URL not found ΓÇö cannot run golden dataset validation")
+				ginkgo.Fail("[RAG] similarity-api URL not found - cannot run golden dataset validation")
 			}
 			logger.Infof("[RAG] Waiting for similarity-api to be healthy at %s/health", similarityBaseURL)
 			similarityCtx, similarityCancel := context.WithTimeout(ctx, 5*time.Minute)
 			defer similarityCancel()
 			if err := rag.WaitForSimilarityAPIReady(similarityCtx, similarityBaseURL, 15*time.Second); err != nil {
-				ginkgo.Fail(fmt.Sprintf("[RAG] similarity-api is not healthy ΓÇö cannot run golden dataset validation: %v", err))
+				ginkgo.Fail(fmt.Sprintf("[RAG] similarity-api is not healthy - cannot run golden dataset validation: %v", err))
 			}
 
-			// Phase 1: download judge model ΓÇö safe before LLM is ready (no GPU contention).
-			logger.Infof("[RAG] Phase 1 ΓÇö downloading LLM-as-Judge model")
+			// Phase 1: download judge model - safe before LLM is ready (no GPU contention).
+			logger.Infof("[RAG] Phase 1 - downloading LLM-as-Judge model")
 			if err := rag.DownloadJudgeModel(ctx, cfg); err != nil {
-				ginkgo.Skip(fmt.Sprintf("[RAG] judge model download failed ΓÇö skipping golden dataset validation: %v", err))
+				ginkgo.Skip(fmt.Sprintf("[RAG] judge model download failed - skipping golden dataset validation: %v", err))
 			}
 			logger.Infof("[RAG] Judge model download completed")
 
-			// Phase 2: wait for main LLM ΓÇö judge container must not start until LLM is ready.
-			logger.Infof("[RAG] Phase 2 ΓÇö waiting for LLM to be ready via %s/v1/models", ragBaseURL)
+			// Phase 2: wait for main LLM - judge container must not start until LLM is ready.
+			logger.Infof("[RAG] Phase 2 - waiting for LLM to be ready via %s/v1/models", ragBaseURL)
 			llmCtx, llmCancel := context.WithTimeout(ctx, 40*time.Minute)
 			defer llmCancel()
 			if err := rag.WaitForRAGBackendReady(llmCtx, ragBaseURL, 30*time.Second); err != nil {
-				ginkgo.Fail(fmt.Sprintf("[RAG] LLM is not ready ΓÇö cannot run golden dataset validation: %v", err))
+				ginkgo.Fail(fmt.Sprintf("[RAG] LLM is not ready - cannot run golden dataset validation: %v", err))
 			}
 
 			freshInfoCtx, freshInfoCancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -1034,7 +1034,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			}
 			digitizeBaseURL := cli.ExtractDigitizeURL(freshInfoOutput)
 			if digitizeBaseURL == "" {
-				ginkgo.Fail("[RAG] could not extract digitize-backend URL ΓÇö cannot ingest documents")
+				ginkgo.Fail("[RAG] could not extract digitize-backend URL - cannot ingest documents")
 			}
 			logger.Infof("[RAG] Ingesting test document via digitize microservice at %s", digitizeBaseURL)
 			// Clear any stale documents from a previous failed run before ingesting.
@@ -1046,12 +1046,12 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			ingestCtx, ingestCancel := context.WithTimeout(ctx, 25*time.Minute)
 			defer ingestCancel()
 			if err := digitization.IngestTestDocumentViaDigitizeAPI(ingestCtx, digitizeBaseURL, "rag-golden-ingest-"+runID); err != nil {
-				ginkgo.Fail(fmt.Sprintf("[RAG] document ingestion failed ΓÇö cannot run golden dataset validation: %v", err))
+				ginkgo.Fail(fmt.Sprintf("[RAG] document ingestion failed - cannot run golden dataset validation: %v", err))
 			}
 			logger.Infof("[RAG] Document ingestion completed successfully")
 
-			// Phase 3: start judge container ΓÇö LLM is ready and weights are on disk.
-			logger.Infof("[RAG] Phase 3 ΓÇö starting LLM-as-Judge container")
+			// Phase 3: start judge container - LLM is ready and weights are on disk.
+			logger.Infof("[RAG] Phase 3 - starting LLM-as-Judge container")
 			judgeCtx, judgeCancel := context.WithTimeout(ctx, 30*time.Minute)
 			defer judgeCancel()
 			if err := rag.StartJudgeContainer(judgeCtx, cfg, runID); err != nil {
@@ -1111,7 +1111,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				for i, tc := range cases {
 					// Stop if the spec-level timeout has fired.
 					if specCtx.Err() != nil {
-						logger.Warningf("[RAG] specCtx cancelled (%v) after %d/%d questions ΓÇö stopping evaluation loop",
+						logger.Warningf("[RAG] specCtx cancelled (%v) after %d/%d questions - stopping evaluation loop",
 							specCtx.Err(), i, total)
 						break
 					}
@@ -1131,7 +1131,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 
 					if ragErr != nil {
 						result.Details = fmt.Sprintf("RAG request failed: %v", ragErr)
-						logger.Infof("[RAG] Question %d/%d ΓÇö RAG failed: %v", i+1, total, ragErr)
+						logger.Infof("[RAG] Question %d/%d - RAG failed: %v", i+1, total, ragErr)
 						results = append(results, result)
 						qCancel()
 
@@ -1148,7 +1148,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					)
 					if judgeErr != nil {
 						result.Details = fmt.Sprintf("Judge failed: %v", judgeErr)
-						logger.Infof("[RAG] Question %d/%d ΓÇö Judge failed: %v", i+1, total, judgeErr)
+						logger.Infof("[RAG] Question %d/%d - Judge failed: %v", i+1, total, judgeErr)
 						results = append(results, result)
 						qCancel()
 
@@ -1202,7 +1202,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			defer cancel()
 
 			// digitize-backend may still be starting after chat-bot-backend and
-			// similarity-api are healthy ΓÇö poll separately for its URL below.
+			// similarity-api are healthy - poll separately for its URL below.
 			infoOutput, err := cli.WaitForApplicationInfoURLs(ctx, cfg, appName, appRuntime, 8*time.Minute, 15*time.Second)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -1361,7 +1361,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			}
 			logger.Infof("[TEST] Listed %d documents with name 'test_doc.pdf'", len(nameFilteredDocsList.Data))
 
-			logger.Infof("[TEST] Γ£ô Full digitization workflow completed successfully")
+			logger.Infof("[TEST] ✓ Full digitization workflow completed successfully")
 		})
 
 		ginkgo.It("should complete full ingestion workflow", func() {
@@ -1378,7 +1378,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(finalStatus.Status).To(gomega.Equal("completed"))
 
-			logger.Infof("[TEST] Γ£ô Ingestion job completed: %s", jobResp.JobID)
+			logger.Infof("[TEST] ✓ Ingestion job completed: %s", jobResp.JobID)
 		})
 
 		ginkgo.It("should support different output formats", func() {
@@ -1427,14 +1427,14 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				s, sErr := digitization.GetJobStatus(guardCtx, digitizeBaseURL, jobResp.JobID)
 				guardCancel()
 				if sErr != nil || (s != nil && s.Status != "in_progress" && s.Status != "accepted" && s.Status != "pending") {
-					ginkgo.Skip("Skipping active-job deletion protection check ΓÇö job completed before delete could be attempted")
+					ginkgo.Skip("Skipping active-job deletion protection check - job completed before delete could be attempted")
 				}
 			}
 			err = digitization.DeleteJob(ctx, digitizeBaseURL, jobResp.JobID)
 			gomega.Expect(err).To(gomega.HaveOccurred())
 			gomega.Expect(digitization.IsResourceLockedError(err)).To(gomega.BeTrue(),
 				"Expected resource locked error (409), got: %v", err)
-			logger.Infof("[TEST] Γ£ô Active job deletion correctly failed with resource locked error")
+			logger.Infof("[TEST] ✓ Active job deletion correctly failed with resource locked error")
 
 			// Step 3: Wait for job completion
 			logger.Infof("[TEST] Step 3: Waiting for job completion")
@@ -1446,17 +1446,17 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			logger.Infof("[TEST] Step 4: Deleting completed job")
 			err = digitization.DeleteJob(ctx, digitizeBaseURL, jobResp.JobID)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-			logger.Infof("[TEST] Γ£ô Completed job deleted successfully")
+			logger.Infof("[TEST] ✓ Completed job deleted successfully")
 
 			// Step 5: Verify job is deleted (should return 404)
 			logger.Infof("[TEST] Step 5: Verifying job deletion")
 			_, err = digitization.GetJobStatus(ctx, digitizeBaseURL, jobResp.JobID)
 			gomega.Expect(err).To(gomega.HaveOccurred())
-			logger.Infof("[TEST] Γ£ô Job deletion verified (404 returned)")
+			logger.Infof("[TEST] ✓ Job deletion verified (404 returned)")
 
 			createdJobIDs = createdJobIDs[:len(createdJobIDs)-1]
 
-			logger.Infof("[TEST] Γ£ô Job lifecycle test completed successfully")
+			logger.Infof("[TEST] ✓ Job lifecycle test completed successfully")
 		})
 
 		ginkgo.It("should handle document lifecycle including protection and deletion", func() {
@@ -1506,15 +1506,15 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			docID := finalStatus.Documents[0].ID
 			err = digitization.DeleteDocument(ctx, digitizeBaseURL, docID)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-			logger.Infof("[TEST] Γ£ô Completed document deleted successfully")
+			logger.Infof("[TEST] ✓ Completed document deleted successfully")
 
 			// Step 5: Verify document is deleted (should return 404)
 			logger.Infof("[TEST] Step 5: Verifying document deletion")
 			_, err = digitization.GetDocument(ctx, digitizeBaseURL, docID)
 			gomega.Expect(err).To(gomega.HaveOccurred())
-			logger.Infof("[TEST] Γ£ô Document deletion verified (404 returned)")
+			logger.Infof("[TEST] ✓ Document deletion verified (404 returned)")
 
-			logger.Infof("[TEST] Γ£ô Document lifecycle test completed successfully")
+			logger.Infof("[TEST] ✓ Document lifecycle test completed successfully")
 		})
 
 		ginkgo.It("should delete all documents", func() {
@@ -1540,7 +1540,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				// 409 RESOURCE_LOCKED when a document already exists. Delete docs
 				// produced by this iteration before the next iteration calls CreateJob.
 				// We keep their IDs in ownDocIDs so the verification below (which
-				// checks found==false) still holds ΓÇö already-deleted docs are absent
+				// checks found==false) still holds - already-deleted docs are absent
 				// from the list, satisfying the same invariant as DeleteAllDocuments.
 				if i < 1 {
 					deleteDigitizeDocsFromJob(digitizeBaseURL, finalStatus.Documents)
@@ -1552,7 +1552,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			err := digitization.DeleteAllDocuments(ctx, digitizeBaseURL)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
-			// Verify each doc created by this spec is gone ΓÇö not a global empty check.
+			// Verify each doc created by this spec is gone - not a global empty check.
 			for _, docID := range ownDocIDs {
 				docsList, listErr := digitization.ListDocuments(ctx, digitizeBaseURL, 100, 0, "", "")
 				gomega.Expect(listErr).NotTo(gomega.HaveOccurred())
@@ -1617,7 +1617,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			if s1Err != nil || s2Err != nil ||
 				(s1 != nil && s1.Status != "in_progress" && s1.Status != "accepted" && s1.Status != "pending") ||
 				(s2 != nil && s2.Status != "in_progress" && s2.Status != "accepted" && s2.Status != "pending") {
-				ginkgo.Skip("Skipping rate-limit check ΓÇö both jobs completed before the third could be submitted (hardware is too fast)")
+				ginkgo.Skip("Skipping rate-limit check - both jobs completed before the third could be submitted (hardware is too fast)")
 			}
 
 			// Try to create third digitization job - should fail with rate limit error
@@ -1674,7 +1674,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				s, sErr := digitization.GetJobStatus(guardCtx, digitizeBaseURL, job1Resp.JobID)
 				guardCancel()
 				if sErr != nil || (s != nil && s.Status != "in_progress" && s.Status != "accepted" && s.Status != "pending") {
-					ginkgo.Skip("Skipping concurrent ingestion rate-limit check ΓÇö first job completed before second could be submitted")
+					ginkgo.Skip("Skipping concurrent ingestion rate-limit check - first job completed before second could be submitted")
 				}
 			}
 
@@ -1723,7 +1723,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			// Validate the error response structure.
 			// Use ContainSubstring for the message so minor server-side wording
 			// changes ("unsupported format" vs "invalid format") don't break the
-			// test ΓÇö we care that the right code, status, and filename are present.
+			// test - we care that the right code, status, and filename are present.
 			gomega.Expect(errorResp.Error.Code).To(gomega.Equal("UNSUPPORTED_MEDIA_TYPE"))
 			gomega.Expect(errorResp.Error.Message).To(gomega.ContainSubstring(".pdf extension"))
 			gomega.Expect(errorResp.Error.Message).To(gomega.ContainSubstring("sample_png.pdf"))
@@ -1743,7 +1743,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			expectErrResp(err, errorResp)
 
 			// Validate the error response structure.
-			// Use ContainSubstring for the message ΓÇö wording may differ across
+			// Use ContainSubstring for the message - wording may differ across
 			// backend versions; the code, status, and filename are the stable signals.
 			gomega.Expect(errorResp.Error.Code).To(gomega.Equal("UNSUPPORTED_MEDIA_TYPE"))
 			gomega.Expect(errorResp.Error.Message).To(gomega.ContainSubstring(".pdf extension"))
@@ -1806,7 +1806,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(errorResp.Error.Message).To(gomega.ContainSubstring("not found"))
 			gomega.Expect(errorResp.Error.Status).To(gomega.Equal(404))
 
-			logger.Infof("[TEST] Γ£ô GetJobStatus correctly returned 404 for invalid ID: %s", errorResp.Error.Message)
+			logger.Infof("[TEST] ✓ GetJobStatus correctly returned 404 for invalid ID: %s", errorResp.Error.Message)
 		})
 
 		ginkgo.It("should return 404 error when getting document with invalid ID", func() {
@@ -1824,7 +1824,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(errorResp.Error.Message).To(gomega.ContainSubstring("not found"))
 			gomega.Expect(errorResp.Error.Status).To(gomega.Equal(404))
 
-			logger.Infof("[TEST] Γ£ô GetDocument correctly returned 404 for invalid ID: %s", errorResp.Error.Message)
+			logger.Infof("[TEST] ✓ GetDocument correctly returned 404 for invalid ID: %s", errorResp.Error.Message)
 		})
 
 		ginkgo.It("should return 404 error when getting document content with invalid ID", func() {
@@ -1842,7 +1842,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(errorResp.Error.Message).To(gomega.ContainSubstring("not found"))
 			gomega.Expect(errorResp.Error.Status).To(gomega.Equal(404))
 
-			logger.Infof("[TEST] Γ£ô GetDocumentContent correctly returned 404 for invalid ID: %s", errorResp.Error.Message)
+			logger.Infof("[TEST] ✓ GetDocumentContent correctly returned 404 for invalid ID: %s", errorResp.Error.Message)
 		})
 
 		ginkgo.It("should return 404 error when deleting job with invalid ID", func() {
@@ -1860,13 +1860,13 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(errorResp.Error.Message).To(gomega.ContainSubstring("not found"))
 			gomega.Expect(errorResp.Error.Status).To(gomega.Equal(404))
 
-			logger.Infof("[TEST] Γ£ô DeleteJob correctly returned 404 for invalid ID: %s", errorResp.Error.Message)
+			logger.Infof("[TEST] ✓ DeleteJob correctly returned 404 for invalid ID: %s", errorResp.Error.Message)
 		})
 
 		// The digitize backend treats DELETE /v1/documents/:id as idempotent:
 		// when the document does not exist it cleans up the vectorstore (0 chunks
 		// removed), logs a warning, and returns HTTP 204 rather than 404.
-		// This is intentional server behaviour ΓÇö the endpoint is "delete if exists".
+		// This is intentional server behaviour - the endpoint is "delete if exists".
 		// The test expectation (404) does not match reality, so it stays pending.
 		ginkgo.XIt("should return 404 error when deleting document with invalid ID", func() {
 			ctx, cancel := withTimeout(30 * time.Second)
@@ -1883,7 +1883,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(errorResp.Error.Message).To(gomega.ContainSubstring("not found"))
 			gomega.Expect(errorResp.Error.Status).To(gomega.Equal(404))
 
-			logger.Infof("[TEST] Γ£ô DeleteDocument correctly returned 404 for invalid ID: %s", errorResp.Error.Message)
+			logger.Infof("[TEST] ✓ DeleteDocument correctly returned 404 for invalid ID: %s", errorResp.Error.Message)
 		})
 
 		ginkgo.It("should successfully process blank PDF file for digitization operation", func() {
@@ -1907,7 +1907,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			finalStatus, err := digitization.WaitForJobCompletion(ctx, digitizeBaseURL, jobResp.JobID, 10*time.Minute)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(finalStatus.Status).To(gomega.Equal("completed"))
-			logger.Infof("[TEST] Γ£ô Blank PDF digitization job completed successfully: %s", jobResp.JobID)
+			logger.Infof("[TEST] ✓ Blank PDF digitization job completed successfully: %s", jobResp.JobID)
 
 			// Verify document was created
 			gomega.Expect(finalStatus.Documents).NotTo(gomega.BeEmpty())
@@ -1919,7 +1919,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(doc.Status).To(gomega.Equal("completed"))
 			gomega.Expect(doc.Name).To(gomega.Equal("blank.pdf"))
-			logger.Infof("[TEST] Γ£ô Blank PDF digitization completed successfully")
+			logger.Infof("[TEST] ✓ Blank PDF digitization completed successfully")
 		})
 
 		ginkgo.It("should successfully process blank PDF file for ingestion operation", func() {
@@ -1943,7 +1943,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			finalStatus, err := digitization.WaitForJobCompletion(ctx, digitizeBaseURL, jobResp.JobID, 15*time.Minute)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(finalStatus.Status).To(gomega.Equal("completed"))
-			logger.Infof("[TEST] Γ£ô Blank PDF ingestion job completed successfully: %s", jobResp.JobID)
+			logger.Infof("[TEST] ✓ Blank PDF ingestion job completed successfully: %s", jobResp.JobID)
 
 			// Verify document was created
 			gomega.Expect(finalStatus.Documents).NotTo(gomega.BeEmpty())
@@ -1955,7 +1955,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(doc.Status).To(gomega.Equal("completed"))
 			gomega.Expect(doc.Name).To(gomega.Equal("blank.pdf"))
-			logger.Infof("[TEST] Γ£ô Blank PDF ingestion completed successfully")
+			logger.Infof("[TEST] ✓ Blank PDF ingestion completed successfully")
 		})
 		// ΓöÇΓöÇ Export API ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
@@ -1991,7 +1991,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				}
 			}
 			gomega.Expect(found).To(gomega.BeTrue(), "seeded job %s should appear in export response", jobResp.JobID)
-			logger.Infof("[TEST] Γ£ô Export returned %d job(s) and %d document(s)",
+			logger.Infof("[TEST] ✓ Export returned %d job(s) and %d document(s)",
 				exportResp.Summary.Jobs.TotalExported, exportResp.Summary.Documents.TotalExported)
 		})
 
@@ -2004,11 +2004,9 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(exportResp.Pagination.Limit).To(gomega.Equal(limitOne))
 			gomega.Expect(len(exportResp.Data.Jobs)).To(gomega.BeNumerically("<=", limitOne))
-			logger.Infof("[TEST] Γ£ô Export limit=%d returned %d job(s) has_more=%v",
+			logger.Infof("[TEST] ✓ Export limit=%d returned %d job(s) has_more=%v",
 				limitOne, len(exportResp.Data.Jobs), exportResp.Pagination.HasMore)
 		})
-
-		// ΓöÇΓöÇ Import API ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 		ginkgo.It("should import previously exported data via /v1/import", func() {
 			ctx, cancel := withTimeout(15 * time.Minute)
@@ -2044,7 +2042,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(importResp.Summary.Jobs.Failed).To(gomega.Equal(0), "no jobs should have failed during import")
 			gomega.Expect(importResp.Summary.Documents.Failed).To(gomega.Equal(0), "no documents should have failed during import")
 
-			logger.Infof("[TEST] Γ£ô Import round-trip: jobs(imported=%d skipped=%d) docs(imported=%d skipped=%d)",
+			logger.Infof("[TEST] ✓ Import round-trip: jobs(imported=%d skipped=%d) docs(imported=%d skipped=%d)",
 				importResp.Summary.Jobs.Imported, importResp.Summary.Jobs.Skipped,
 				importResp.Summary.Documents.Imported, importResp.Summary.Documents.Skipped)
 		})
@@ -2055,7 +2053,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).To(gomega.HaveOccurred())
 			gomega.Expect(err.Error()).To(gomega.ContainSubstring("422"), "%s: expected HTTP 422", label)
 			gomega.Expect(err.Error()).To(gomega.ContainSubstring(wantSubstr), "%s: expected %q in error body", label, wantSubstr)
-			logger.Infof("[TEST] Γ£ô %s correctly rejected (422): %v", label, err)
+			logger.Infof("[TEST] ✓ %s correctly rejected (422): %v", label, err)
 		}
 
 		ginkgo.It("should return 422 when importing with missing 'data' key", func() {
@@ -2083,7 +2081,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 
 		ginkgo.BeforeAll(func() {
 			if templateName != "summarize" {
-				ginkgo.Skip(fmt.Sprintf("Skipping summarization tests ΓÇö template is '%s', not 'summarize'", templateName))
+				ginkgo.Skip(fmt.Sprintf("Skipping summarization tests - template is '%s', not 'summarize'", templateName))
 			}
 			if appName == "" {
 				ginkgo.Fail("Application name is not set")
@@ -2120,7 +2118,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 
 			err := summarization.HealthCheck(ctx, summarizeBaseURL)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-			logger.Infof("[TEST] Γ£ô Summarization service health check passed")
+			logger.Infof("[TEST] ✓ Summarization service health check passed")
 		})
 
 		ginkgo.It("summarizes a PDF file with standard level", func() {
@@ -2133,7 +2131,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			res, err := summarization.SubmitAndVerifyJob(ctx, summarizeBaseURL, pdfPath, "", "standard", jobName, false, 15*time.Minute)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			createdJobIDs = append(createdJobIDs, res.Detail.JobID)
-			logger.Infof("[TEST] Γ£ô PDF summary retrieved successfully (length: %d chars)", len(res.Summary))
+			logger.Infof("[TEST] ✓ PDF summary retrieved successfully (length: %d chars)", len(res.Summary))
 		})
 
 		ginkgo.It("summarizes a TXT file with brief level", func() {
@@ -2146,7 +2144,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			res, err := summarization.SubmitAndVerifyJob(ctx, summarizeBaseURL, txtPath, "", "brief", jobName, false, 15*time.Minute)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			createdJobIDs = append(createdJobIDs, res.Detail.JobID)
-			logger.Infof("[TEST] Γ£ô TXT summary retrieved successfully (length: %d chars)", len(res.Summary))
+			logger.Infof("[TEST] ✓ TXT summary retrieved successfully (length: %d chars)", len(res.Summary))
 		})
 
 		ginkgo.It("summarizes text input with detailed level", func() {
@@ -2159,7 +2157,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			res, err := summarization.SubmitAndVerifyJob(ctx, summarizeBaseURL, "", testText, "detailed", jobName, false, 15*time.Minute)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			createdJobIDs = append(createdJobIDs, res.Detail.JobID)
-			logger.Infof("[TEST] Γ£ô Text summary retrieved successfully (length: %d chars)", len(res.Summary))
+			logger.Infof("[TEST] ✓ Text summary retrieved successfully (length: %d chars)", len(res.Summary))
 		})
 
 		ginkgo.It("tests different summary levels produce different outputs", func() {
@@ -2184,7 +2182,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			// Verify summaries are different
 			gomega.Expect(summaries["brief"]).NotTo(gomega.Equal(summaries["standard"]))
 			gomega.Expect(summaries["standard"]).NotTo(gomega.Equal(summaries["detailed"]))
-			logger.Infof("[TEST] Γ£ô Different summary levels produce different outputs")
+			logger.Infof("[TEST] ✓ Different summary levels produce different outputs")
 		})
 
 		ginkgo.It("tests streaming mode", func() {
@@ -2197,7 +2195,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			res, err := summarization.SubmitAndVerifyJob(ctx, summarizeBaseURL, "", testText, "standard", jobName, true, 15*time.Minute)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			createdJobIDs = append(createdJobIDs, res.Detail.JobID)
-			logger.Infof("[TEST] Γ£ô Streaming summarization job completed: %s", res.Detail.JobID)
+			logger.Infof("[TEST] ✓ Streaming summarization job completed: %s", res.Detail.JobID)
 		})
 
 		ginkgo.It("handles empty text input - job fails with appropriate error", func() {
@@ -2212,7 +2210,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(finalStatus.Status).To(gomega.Equal(summarization.JobStatusFailed))
 			gomega.Expect(finalStatus.Error).NotTo(gomega.BeNil())
 			gomega.Expect(*finalStatus.Error).To(gomega.ContainSubstring("Extracted text is empty"))
-			logger.Infof("[TEST] Γ£ô Empty text correctly failed with error: %s", *finalStatus.Error)
+			logger.Infof("[TEST] ✓ Empty text correctly failed with error: %s", *finalStatus.Error)
 
 			time.Sleep(5 * time.Second)
 			gomega.Expect(summarization.DeleteJob(ctx, summarizeBaseURL, finalStatus.JobID)).To(gomega.Succeed())
@@ -2225,10 +2223,10 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			testText := "This is a test text for invalid level. Artificial Intelligence is transforming industries."
 			jobName := fmt.Sprintf("invalid-level-%d", time.Now().Unix())
 
-			// API accepts invalid level and treats it as "standard" ΓÇö job completes.
+			// API accepts invalid level and treats it as "standard" - job completes.
 			res, err := summarization.SubmitAndVerifyJob(ctx, summarizeBaseURL, "", testText, "invalid_level", jobName, false, 2*time.Minute)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-			logger.Infof("[TEST] Γ£ô Job completed successfully with default level")
+			logger.Infof("[TEST] ✓ Job completed successfully with default level")
 
 			time.Sleep(5 * time.Second)
 			gomega.Expect(summarization.DeleteJob(ctx, summarizeBaseURL, res.Detail.JobID)).To(gomega.Succeed())
@@ -2255,7 +2253,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				gomega.ContainSubstring(".pdf"),
 				gomega.ContainSubstring("allowed"),
 			))
-			logger.Infof("[TEST] Γ£ô Invalid file format correctly rejected: %s", errorResp.Error.Message)
+			logger.Infof("[TEST] ✓ Invalid file format correctly rejected: %s", errorResp.Error.Message)
 		})
 
 		ginkgo.It("lists jobs with pagination and filters", func() {
@@ -2279,19 +2277,19 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			listResp, err := summarization.ListJobs(ctx, summarizeBaseURL, 10, 0, "", "")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(len(listResp.Data)).To(gomega.BeNumerically(">=", 2))
-			logger.Infof("[TEST] Γ£ô Listed %d jobs", len(listResp.Data))
+			logger.Infof("[TEST] ✓ Listed %d jobs", len(listResp.Data))
 
 			// Test pagination
 			listResp, err = summarization.ListJobs(ctx, summarizeBaseURL, 1, 0, "", "")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(len(listResp.Data)).To(gomega.Equal(1))
-			logger.Infof("[TEST] Γ£ô Pagination works correctly")
+			logger.Infof("[TEST] ✓ Pagination works correctly")
 
 			// Test filtering by job name
 			listResp, err = summarization.ListJobs(ctx, summarizeBaseURL, 10, 0, "", jobNames[0])
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(len(listResp.Data)).To(gomega.BeNumerically(">=", 1))
-			logger.Infof("[TEST] Γ£ô Job name filtering works correctly")
+			logger.Infof("[TEST] ✓ Job name filtering works correctly")
 		})
 
 		ginkgo.It("deletes a job successfully", func() {
@@ -2307,12 +2305,12 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			logger.Infof("[TEST] Job ready for deletion: %s", jobID)
 
 			gomega.Expect(summarization.DeleteJob(ctx, summarizeBaseURL, jobID)).To(gomega.Succeed())
-			logger.Infof("[TEST] Γ£ô Job deleted successfully: %s", jobID)
+			logger.Infof("[TEST] ✓ Job deleted successfully: %s", jobID)
 
 			// Verify job is deleted (should return error)
 			_, err = summarization.GetJobDetail(ctx, summarizeBaseURL, jobID)
 			gomega.Expect(err).To(gomega.HaveOccurred())
-			logger.Infof("[TEST] Γ£ô Verified job no longer exists")
+			logger.Infof("[TEST] ✓ Verified job no longer exists")
 		})
 	})
 
@@ -2322,7 +2320,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 
 		ginkgo.BeforeAll(func() {
 			if templateName != "summarize" {
-				ginkgo.Skip(fmt.Sprintf("Skipping synchronous summarization tests ΓÇö template is '%s', not 'summarize'", templateName))
+				ginkgo.Skip(fmt.Sprintf("Skipping synchronous summarization tests - template is '%s', not 'summarize'", templateName))
 			}
 			if appName == "" {
 				ginkgo.Fail("Application name is not set")
@@ -2339,8 +2337,6 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			waitForSummarizeHealthy("SUMMARIZE-SYNC", syncSummarizeBaseURL, 15*time.Minute)
 		})
 
-		// ΓöÇΓöÇ JSON body ΓÇö happy path ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
 		ginkgo.It("summarizes small text via JSON body (standard level)", func() {
 			ctx, cancel := withTimeout(5 * time.Minute)
 			defer cancel()
@@ -2349,7 +2345,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				"AI is transforming industries.", "standard")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(resp.Summary()).NotTo(gomega.BeEmpty())
-			logger.Infof("[TEST] Γ£ô small text standard (len=%d)", len(resp.Summary()))
+			logger.Infof("[TEST] ✓ small text standard (len=%d)", len(resp.Summary()))
 		})
 
 		ginkgo.It("summarizes medium text via JSON body (standard level)", func() {
@@ -2360,7 +2356,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				"Artificial intelligence is widely used in healthcare, finance, and transportation.", "standard")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(resp.Summary()).NotTo(gomega.BeEmpty())
-			logger.Infof("[TEST] Γ£ô medium text standard (len=%d)", len(resp.Summary()))
+			logger.Infof("[TEST] ✓ medium text standard (len=%d)", len(resp.Summary()))
 		})
 
 		ginkgo.It("summarizes larger text via JSON body (standard level)", func() {
@@ -2387,7 +2383,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			resp, err := summarization.SummarizeText(ctx, syncSummarizeBaseURL, text, "standard")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(resp.Summary()).NotTo(gomega.BeEmpty())
-			logger.Infof("[TEST] Γ£ô larger text standard (len=%d)", len(resp.Summary()))
+			logger.Infof("[TEST] ✓ larger text standard (len=%d)", len(resp.Summary()))
 		})
 
 		ginkgo.It("summarizes text via JSON body with 'brief' level", func() {
@@ -2401,7 +2397,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			resp, err := summarization.SummarizeText(ctx, syncSummarizeBaseURL, text, "brief")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(resp.Summary()).NotTo(gomega.BeEmpty())
-			logger.Infof("[TEST] Γ£ô text brief (len=%d)", len(resp.Summary()))
+			logger.Infof("[TEST] ✓ text brief (len=%d)", len(resp.Summary()))
 		})
 
 		ginkgo.It("summarizes text via JSON body with 'detailed' level", func() {
@@ -2415,7 +2411,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			resp, err := summarization.SummarizeText(ctx, syncSummarizeBaseURL, text, "detailed")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(resp.Summary()).NotTo(gomega.BeEmpty())
-			logger.Infof("[TEST] Γ£ô text detailed (len=%d)", len(resp.Summary()))
+			logger.Infof("[TEST] ✓ text detailed (len=%d)", len(resp.Summary()))
 		})
 
 		ginkgo.It("summarizes text via JSON body with no level (defaults to standard)", func() {
@@ -2426,7 +2422,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				"AI improves efficiency", "")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(resp.Summary()).NotTo(gomega.BeEmpty())
-			logger.Infof("[TEST] Γ£ô text no-level (len=%d)", len(resp.Summary()))
+			logger.Infof("[TEST] ✓ text no-level (len=%d)", len(resp.Summary()))
 		})
 
 		ginkgo.It("different JSON levels produce different summaries for the same text", func() {
@@ -2447,10 +2443,8 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				logger.Infof("[TEST] level=%s summary_len=%d", level, len(resp.Summary()))
 			}
 			gomega.Expect(summaries["brief"]).NotTo(gomega.Equal(summaries["detailed"]))
-			logger.Infof("[TEST] Γ£ô different levels produce different summaries")
+			logger.Infof("[TEST] ✓ different levels produce different summaries")
 		})
-
-		// ΓöÇΓöÇ JSON body ΓÇö legacy length ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 		ginkgo.It("summarizes text via JSON body with legacy 'length' field and verifies summary_length range", func() {
 			ctx, cancel := withTimeout(5 * time.Minute)
@@ -2466,10 +2460,8 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			// Allow ┬▒75% tolerance around the requested length (server does approximate word-count).
 			gomega.Expect(resp.Data.SummaryLength).To(gomega.BeNumerically(">=", 5))
 			gomega.Expect(resp.Data.SummaryLength).To(gomega.BeNumerically("<=", 35))
-			logger.Infof("[TEST] Γ£ô legacy length=20, actual summary_length=%d", resp.Data.SummaryLength)
+			logger.Infof("[TEST] ✓ legacy length=20, actual summary_length=%d", resp.Data.SummaryLength)
 		})
-
-		// ΓöÇΓöÇ JSON body ΓÇö stream=true ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 		ginkgo.It("receives SSE chunks when stream=true via JSON body", func() {
 			ctx, cancel := withTimeout(5 * time.Minute)
@@ -2484,7 +2476,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusOK))
 			// SSE responses contain "data:" event lines.
 			gomega.Expect(string(rawBody)).To(gomega.ContainSubstring("data:"))
-			logger.Infof("[TEST] Γ£ô stream=true returned SSE body (len=%d)", len(rawBody))
+			logger.Infof("[TEST] ✓ stream=true returned SSE body (len=%d)", len(rawBody))
 		})
 
 		ginkgo.It("summarizes text with stream=false via JSON body", func() {
@@ -2495,10 +2487,8 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				"AI improves productivity", "standard")
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(resp.Summary()).NotTo(gomega.BeEmpty())
-			logger.Infof("[TEST] Γ£ô stream=false returned summary (len=%d)", len(resp.Summary()))
+			logger.Infof("[TEST] ✓ stream=false returned summary (len=%d)", len(resp.Summary()))
 		})
-
-		// ΓöÇΓöÇ Multipart / file upload ΓÇö happy path ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 		ginkgo.It("summarizes a TXT file via multipart form (standard level)", func() {
 			ctx, cancel := withTimeout(5 * time.Minute)
@@ -2510,7 +2500,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			kw, found := common.SummaryContainsAnyKeyword(resp.Summary(), summarization.TXTSummaryKeywords)
 			gomega.Expect(found).To(gomega.BeTrue(),
 				fmt.Sprintf("expected TXT summary to mention one of %v, got: %q", summarization.TXTSummaryKeywords, resp.Summary()))
-			logger.Infof("[TEST] Γ£ô TXT upload standard (len=%d, keyword=%q)", len(resp.Summary()), kw)
+			logger.Infof("[TEST] ✓ TXT upload standard (len=%d, keyword=%q)", len(resp.Summary()), kw)
 		})
 
 		ginkgo.It("summarizes a TXT file via multipart form with 'brief' level field", func() {
@@ -2523,23 +2513,23 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			kw, found := common.SummaryContainsAnyKeyword(resp.Summary(), summarization.TXTSummaryKeywords)
 			gomega.Expect(found).To(gomega.BeTrue(),
 				fmt.Sprintf("expected TXT summary to mention one of %v, got: %q", summarization.TXTSummaryKeywords, resp.Summary()))
-			logger.Infof("[TEST] Γ£ô TXT level=brief (len=%d, keyword=%q)", len(resp.Summary()), kw)
+			logger.Infof("[TEST] ✓ TXT level=brief (len=%d, keyword=%q)", len(resp.Summary()), kw)
 		})
 
-		ginkgo.It("summarizes a PDF file via multipart form (no level ΓÇö default)", func() {
+		ginkgo.It("summarizes a PDF file via multipart form (no level - default)", func() {
 			ctx, cancel := withTimeout(5 * time.Minute)
 			defer cancel()
 
 			resp, err := summarization.SummarizeFile(ctx, syncSummarizeBaseURL,
 				testFilePath("ingestion/docs/sync_test.pdf"), "")
 			if summarization.IsContextLimitError(err) {
-				ginkgo.Skip(fmt.Sprintf("skipping ΓÇö PDF exceeds model context limit: %v", err))
+				ginkgo.Skip(fmt.Sprintf("skipping - PDF exceeds model context limit: %v", err))
 			}
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			kw, found := common.SummaryContainsAnyKeyword(resp.Summary(), summarization.PDFSummaryKeywords)
 			gomega.Expect(found).To(gomega.BeTrue(),
 				fmt.Sprintf("expected PDF summary to mention one of %v, got: %q", summarization.PDFSummaryKeywords, resp.Summary()))
-			logger.Infof("[TEST] Γ£ô PDF no level (len=%d, keyword=%q)", len(resp.Summary()), kw)
+			logger.Infof("[TEST] ✓ PDF no level (len=%d, keyword=%q)", len(resp.Summary()), kw)
 		})
 
 		ginkgo.It("summarizes a PDF file via multipart form with 'detailed' level field", func() {
@@ -2549,13 +2539,13 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			resp, err := summarization.SummarizeFile(ctx, syncSummarizeBaseURL,
 				testFilePath("ingestion/docs/sync_test.pdf"), "detailed")
 			if summarization.IsContextLimitError(err) {
-				ginkgo.Skip(fmt.Sprintf("skipping ΓÇö PDF exceeds model context limit: %v", err))
+				ginkgo.Skip(fmt.Sprintf("skipping - PDF exceeds model context limit: %v", err))
 			}
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			kw, found := common.SummaryContainsAnyKeyword(resp.Summary(), summarization.PDFSummaryKeywords)
 			gomega.Expect(found).To(gomega.BeTrue(),
 				fmt.Sprintf("expected PDF summary to mention one of %v, got: %q", summarization.PDFSummaryKeywords, resp.Summary()))
-			logger.Infof("[TEST] Γ£ô PDF level=detailed (len=%d, keyword=%q)", len(resp.Summary()), kw)
+			logger.Infof("[TEST] ✓ PDF level=detailed (len=%d, keyword=%q)", len(resp.Summary()), kw)
 		})
 
 		ginkgo.It("summarizes a PDF file via multipart form with legacy 'length' field", func() {
@@ -2565,16 +2555,14 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			resp, err := summarization.SummarizeFileWithLength(ctx, syncSummarizeBaseURL,
 				testFilePath("ingestion/docs/sync_test.pdf"), 50)
 			if summarization.IsContextLimitError(err) {
-				ginkgo.Skip(fmt.Sprintf("skipping ΓÇö PDF exceeds model context limit: %v", err))
+				ginkgo.Skip(fmt.Sprintf("skipping - PDF exceeds model context limit: %v", err))
 			}
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(resp.Summary()).NotTo(gomega.BeEmpty())
-			logger.Infof("[TEST] Γ£ô PDF legacy length=50 (summary_len=%d)", resp.Data.SummaryLength)
+			logger.Infof("[TEST] ✓ PDF legacy length=50 (summary_len=%d)", resp.Data.SummaryLength)
 		})
 
-		// ΓöÇΓöÇ Error paths ΓÇö input validation ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
-		ginkgo.It("returns 400 for missing input ΓÇö empty JSON object {}", func() {
+		ginkgo.It("returns 400 for missing input - empty JSON object {}", func() {
 			ctx, cancel := withTimeout(30 * time.Second)
 			defer cancel()
 
@@ -2586,10 +2574,10 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusBadRequest))
 			gomega.Expect(string(rawBody)).To(gomega.ContainSubstring("error"))
-			logger.Infof("[TEST] Γ£ô empty JSON object rejected (status=%d)", statusCode)
+			logger.Infof("[TEST] ✓ empty JSON object rejected (status=%d)", statusCode)
 		})
 
-		ginkgo.It("returns 400 for invalid field name ΓÇö {\"txt\":\"AI\"}", func() {
+		ginkgo.It("returns 400 for invalid field name - {\"txt\":\"AI\"}", func() {
 			ctx, cancel := withTimeout(30 * time.Second)
 			defer cancel()
 
@@ -2601,7 +2589,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusBadRequest))
 			gomega.Expect(string(rawBody)).To(gomega.ContainSubstring("error"))
-			logger.Infof("[TEST] Γ£ô invalid field rejected (status=%d)", statusCode)
+			logger.Infof("[TEST] ✓ invalid field rejected (status=%d)", statusCode)
 		})
 
 		ginkgo.It("returns 400 for invalid JSON body", func() {
@@ -2616,7 +2604,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusBadRequest))
 			gomega.Expect(string(rawBody)).To(gomega.ContainSubstring("error"))
-			logger.Infof("[TEST] Γ£ô invalid JSON rejected (status=%d)", statusCode)
+			logger.Infof("[TEST] ✓ invalid JSON rejected (status=%d)", statusCode)
 		})
 
 		ginkgo.It("returns 415 for wrong Content-Type (text/plain)", func() {
@@ -2631,7 +2619,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusUnsupportedMediaType))
 			gomega.Expect(string(rawBody)).To(gomega.ContainSubstring("error"))
-			logger.Infof("[TEST] Γ£ô text/plain rejected (status=%d)", statusCode)
+			logger.Infof("[TEST] ✓ text/plain rejected (status=%d)", statusCode)
 		})
 
 		ginkgo.It("returns 415 for empty request (no Content-Type)", func() {
@@ -2646,7 +2634,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusUnsupportedMediaType))
 			gomega.Expect(string(rawBody)).To(gomega.ContainSubstring("error"))
-			logger.Infof("[TEST] Γ£ô empty request (no content-type) rejected (status=%d)", statusCode)
+			logger.Infof("[TEST] ✓ empty request (no content-type) rejected (status=%d)", statusCode)
 		})
 
 		ginkgo.It("returns 400 for empty text in JSON body", func() {
@@ -2659,7 +2647,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(errResp).NotTo(gomega.BeNil())
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusBadRequest))
 			gomega.Expect(errResp.Error.Code).To(gomega.Equal(400))
-			logger.Infof("[TEST] Γ£ô empty text rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
+			logger.Infof("[TEST] ✓ empty text rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
 		})
 
 		ginkgo.It("returns 400 for empty TXT file upload", func() {
@@ -2676,7 +2664,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(errResp).NotTo(gomega.BeNil())
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusBadRequest))
 			gomega.Expect(errResp.Error.Code).To(gomega.Equal(400))
-			logger.Infof("[TEST] Γ£ô empty file rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
+			logger.Infof("[TEST] ✓ empty file rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
 		})
 
 		ginkgo.It("returns 400 for blank PDF file upload", func() {
@@ -2690,7 +2678,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(errResp).NotTo(gomega.BeNil())
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusBadRequest))
 			gomega.Expect(errResp.Error.Code).To(gomega.Equal(400))
-			logger.Infof("[TEST] Γ£ô blank PDF rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
+			logger.Infof("[TEST] ✓ blank PDF rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
 		})
 
 		ginkgo.It("returns 400 for invalid level parameter via multipart form", func() {
@@ -2704,7 +2692,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(errResp).NotTo(gomega.BeNil())
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusBadRequest))
 			gomega.Expect(errResp.Error.Code).To(gomega.Equal(400))
-			logger.Infof("[TEST] Γ£ô invalid level rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
+			logger.Infof("[TEST] ✓ invalid level rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
 		})
 
 		ginkgo.It("returns 415 for invalid PDF file (fake bytes with .pdf extension)", func() {
@@ -2721,7 +2709,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(errResp).NotTo(gomega.BeNil())
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusUnsupportedMediaType))
 			gomega.Expect(errResp.Error.Code).To(gomega.Equal(415))
-			logger.Infof("[TEST] Γ£ô invalid PDF rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
+			logger.Infof("[TEST] ✓ invalid PDF rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
 		})
 
 		ginkgo.It("returns 415 for binary TXT file (random bytes with .txt extension)", func() {
@@ -2743,19 +2731,10 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(errResp).NotTo(gomega.BeNil())
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusUnsupportedMediaType))
 			gomega.Expect(errResp.Error.Code).To(gomega.Equal(415))
-			logger.Infof("[TEST] Γ£ô binary TXT rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
+			logger.Infof("[TEST] ✓ binary TXT rejected (status=%d, msg=%s)", statusCode, errResp.Error.Message)
 		})
 
-		// ΓöÇΓöÇ Concurrency ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
 		ginkgo.It("handles 32 concurrent JSON text requests without transport errors", func() {
-			// Mirrors: seq 32 | parallel -j 32 make_request {}
-			// Each goroutine fires simultaneously via a shared start gate.
-			// Assertions:
-			//   ΓÇó No goroutine-level transport errors (network / TLS).
-			//   ΓÇó Every response is either 200 OK (success) or a documented server
-			//     limit code: 429 Too Many Requests or 503 Service Unavailable.
-			//   ΓÇó At least one request must succeed (200).
 			const concurrency = 32
 			ctx, cancel := withTimeout(15 * time.Minute)
 			defer cancel()
@@ -2784,7 +2763,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			}
 			gomega.Expect(successCount).To(gomega.BeNumerically(">=", 1),
 				"expected at least one concurrent request to succeed")
-			logger.Infof("[TEST] Γ£ô concurrent text: %d/%d succeeded", successCount, concurrency)
+			logger.Infof("[TEST] ✓ concurrent text: %d/%d succeeded", successCount, concurrency)
 		})
 
 		ginkgo.It("handles 32 concurrent file upload requests without transport errors", func() {
@@ -2802,7 +2781,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			successCount := 0
 			for _, r := range results {
 				if summarization.IsContextLimitError(r.Err) {
-					ginkgo.Skip(fmt.Sprintf("skipping ΓÇö PDF exceeds model context limit on request #%d: %v", r.Index, r.Err))
+					ginkgo.Skip(fmt.Sprintf("skipping - PDF exceeds model context limit on request #%d: %v", r.Index, r.Err))
 				}
 				gomega.Expect(r.Err).NotTo(gomega.HaveOccurred(),
 					fmt.Sprintf("request #%d had a transport error", r.Index))
@@ -2819,7 +2798,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			}
 			gomega.Expect(successCount).To(gomega.BeNumerically(">=", 1),
 				"expected at least one concurrent file upload to succeed")
-			logger.Infof("[TEST] Γ£ô concurrent file: %d/%d succeeded", successCount, concurrency)
+			logger.Infof("[TEST] ✓ concurrent file: %d/%d succeeded", successCount, concurrency)
 		})
 	})
 
@@ -2852,7 +2831,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					if ctx.Err() != nil {
 						ginkgo.Fail("Timed out waiting for similarity-backend URL in 'application info' output")
 					}
-					logger.Infof("[SIMILARITY] similarity-backend URL not yet present ΓÇö retrying in %s", similarityPollInterval)
+					logger.Infof("[SIMILARITY] similarity-backend URL not yet present - retrying in %s", similarityPollInterval)
 					select {
 					case <-ctx.Done():
 						ginkgo.Fail("Timed out waiting for similarity-backend URL in 'application info' output")
@@ -2943,10 +2922,10 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 				}
 				// At least one mode must have responded successfully.
 				gomega.Expect(results).NotTo(gomega.BeEmpty(),
-					"all search modes failed ΓÇö index may be empty or similarity-api is unreachable")
+					"all search modes failed - index may be empty or similarity-api is unreachable")
 			})
 
-		// Timing test ΓÇö Verify Similarity search API includes time info in response headers or body in podman runtime
+		// Timing test - Verify Similarity search API includes time info in response headers or body in podman runtime
 		ginkgo.It("Verify Similarity search API includes time info in response headers or body in podman runtime",
 			func() {
 				ctx, cancel := withTimeout(30 * time.Second)
@@ -3238,20 +3217,19 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					// Guard: OpenShift only.
 					if appRuntime != "openshift" {
 						ginkgo.Skip(fmt.Sprintf(
-							"[OPENSHIFT-BR] Skipping ΓÇö runtime is %q, not \"openshift\"", appRuntime,
+							"[OPENSHIFT-BR] Skipping - runtime is %q, not \"openshift\"", appRuntime,
 						))
 					}
 					// Guard: require a running app.
 					if providedAppName == "" {
 						ginkgo.Skip(
-							"[OPENSHIFT-BR] Skipping ΓÇö --app-name not provided; " +
+							"[OPENSHIFT-BR] Skipping - --app-name not provided; " +
 								"pass --app-name=<app> to target a running application",
 						)
 					}
 
 					catalogLoginWithDiscovery(specCtx, true)
 
-					// ΓöÇΓöÇ Step 1: Resolve URLs from the running app ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 					ginkgo.By("resolving URLs from the running application")
 					infoOutput, err := cli.WaitForApplicationInfoURLs(specCtx, cfg, appName, appRuntime, 8*time.Minute, 15*time.Second)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -3269,13 +3247,12 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 
 					logger.Infof("[OPENSHIFT-BR] RAG URL: %s  Digitize URL: %s", osRAGBaseURL, osDigitizeURL)
 
-					// ΓöÇΓöÇ Step 2: Clear any stale documents from previous runs ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 					ginkgo.By("clearing any stale documents from previous test runs")
 					if err := digitization.DeleteAllDocuments(specCtx, osDigitizeURL); err != nil {
 						logger.Warningf("[OPENSHIFT-BR] pre-test document cleanup failed (non-fatal): %v", err)
 					}
 
-					// ΓöÇΓöÇ Step 3: Run digitization FIRST to populate the digitize DB ΓöÇ
+					// Step 3: Run digitization FIRST to populate the digitize DB
 					// Ingestion runs after so OpenSearch is populated for RAG queries.
 					// This order avoids a 409 RESOURCE_LOCKED: the file is not yet
 					// known to the system when digitization runs, so there is no conflict.
@@ -3301,7 +3278,6 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					osDigitizeDocStatus = osDoc.Status
 					logger.Infof("[OPENSHIFT-BR] Seeded digitize job=%s doc=%s", osDigitizeJobID, osDigitizeDocName)
 
-					// ΓöÇΓöÇ Step 4: Ingest test document to populate OpenSearch ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 					// Runs after digitization so test_doc.pdf is already in the digitize
 					// DB. Ingestion re-processes the file (different operation type) and
 					// indexes it into OpenSearch without receiving a 409.
@@ -3309,9 +3285,8 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					gomega.Expect(
 						digitization.IngestTestDocumentViaDigitizeAPI(specCtx, osDigitizeURL, "e2e-os-br-ingest"),
 					).To(gomega.Succeed())
-					logger.Infof("[OPENSHIFT-BR] Ingestion completed ΓÇö OpenSearch populated")
+					logger.Infof("[OPENSHIFT-BR] Ingestion completed - OpenSearch populated")
 
-					// ΓöÇΓöÇ Step 5: Capture pre-backup RAG responses ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 					ginkgo.By("capturing pre-backup RAG responses for known prompts")
 					osRAGPrompts := []struct {
 						question string
@@ -3329,7 +3304,6 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 						logger.Infof("[OPENSHIFT-BR] Pre-backup response for %q: %s", p.question, resp)
 					}
 
-					// ΓöÇΓöÇ Step 6: Back up opensearch and digitize ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 					ginkgo.By("backing up opensearch and digitize data")
 					osOpensearchBackupFile = filepath.Join(tempDir, "os-opensearch-backup-"+runID+".tar.gz")
 					osDigitizeBackupFile = filepath.Join(tempDir, "os-digitize-backup-"+runID+".tar.gz")
@@ -3342,18 +3316,17 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					gomega.Expect(err).NotTo(gomega.HaveOccurred(), "[OPENSHIFT-BR] digitize backup failed")
 					logger.Infof("[OPENSHIFT-BR] Digitize backup written to %s", osDigitizeBackupFile)
 
-					// ΓöÇΓöÇ Step 7: Delete the existing app ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 					ginkgo.By("deleting the existing application")
 					deleteOutput, deleteErr := cli.DeleteApp(specCtx, cfg, appName, appRuntime)
 					gomega.Expect(deleteErr).NotTo(gomega.HaveOccurred())
 					gomega.Expect(deleteOutput).NotTo(gomega.BeEmpty())
 					logger.Infof("[OPENSHIFT-BR] Application %s deleted", appName)
 
-					// ΓöÇΓöÇ Step 8: Create a fresh app to restore into (legacy create) ΓöÇ
+					// Step 8: Create a fresh app to restore into (legacy create)
 					// Use the sibling name when --app-name was provided so OpenShift
 					// namespace cleanup lag does not block immediate reuse of the name.
 					// The app is created via the plain 'application create' command
-					// (no URL-probing) ΓÇö mirroring the legacy CLI flow.
+					// (no URL-probing) - mirroring the legacy CLI flow.
 					ginkgo.By("creating a fresh application via legacy create to restore into")
 					osRestoreAppName := appName
 					if providedAppName != "" {
@@ -3376,7 +3349,6 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					gomega.Expect(createOutput).NotTo(gomega.BeEmpty())
 					logger.Infof("[OPENSHIFT-BR] Fresh application %s created", osRestoreAppName)
 
-					// ΓöÇΓöÇ Step 9: Re-login then restore ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 					ginkgo.By("re-logging into catalog and restoring opensearch and digitize")
 					catalogLoginWithDiscovery(specCtx, true)
 
@@ -3388,7 +3360,6 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					gomega.Expect(err).NotTo(gomega.HaveOccurred(), "[OPENSHIFT-BR] digitize restore failed")
 					logger.Infof("[OPENSHIFT-BR] Digitize restore completed")
 
-					// ΓöÇΓöÇ Step 10: Resolve URLs from the restored app ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 					ginkgo.By("waiting for application info URLs on the restored app")
 					restoredInfoOutput, infoErr := cli.WaitForApplicationInfoURLs(specCtx, cfg, osRestoreAppName, appRuntime, 8*time.Minute, 15*time.Second)
 					gomega.Expect(infoErr).NotTo(gomega.HaveOccurred())
@@ -3401,7 +3372,6 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					gomega.Expect(restoredRAGBaseURL).NotTo(gomega.BeEmpty(),
 						"[OPENSHIFT-BR] could not extract RAG backend URL from restored app info")
 
-					// ΓöÇΓöÇ Step 11: Verify digitize jobs were restored ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 					ginkgo.By("verifying digitize jobs were restored")
 					restoredJobs, err := digitization.ListJobs(specCtx, restoredDigitizeURL, false, 20, 0, osDigitizeJobStatus, "digitization")
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -3420,7 +3390,6 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 						"[OPENSHIFT-BR] restored digitize job %s not found", osDigitizeJobID)
 					logger.Infof("[OPENSHIFT-BR] Digitize job %s found after restore", osDigitizeJobID)
 
-					// ΓöÇΓöÇ Step 12: Verify digitize documents were restored ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 					ginkgo.By("verifying digitize documents were restored")
 					restoredDocs, err := digitization.ListDocuments(specCtx, restoredDigitizeURL, 20, 0, "", osDigitizeDocName)
 					gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -3430,7 +3399,6 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 					gomega.Expect(restoredDocs.Data[0].Status).To(gomega.Equal(osDigitizeDocStatus))
 					logger.Infof("[OPENSHIFT-BR] Digitize document %s restored successfully", osDigitizeDocName)
 
-					// ΓöÇΓöÇ Step 13: Verify RAG responses match pre-backup ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 					ginkgo.By("verifying RAG responses match pre-backup responses")
 					for _, p := range osRAGPrompts {
 						logger.Infof("[OPENSHIFT-BR] Post-restore RAG prompt: %s", p.question)
@@ -3457,16 +3425,16 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 						}
 					}
 
-					logger.Infof("[OPENSHIFT-BR] Γ£ô Backup and restore completed successfully (app=%s)", osRestoreAppName)
+					logger.Infof("[OPENSHIFT-BR] ✓ Backup and restore completed successfully (app=%s)", osRestoreAppName)
 				})
 		})
 
 	ginkgo.Context("Application Teardown", ginkgo.Ordered, func() {
 		ginkgo.It("deletes the application", ginkgo.Label("spyre-dependent", "summarization-tests"), func() {
 			if providedAppName != "" {
-				// The app was provided by the caller ΓÇö do not delete it so the
+				// The app was provided by the caller - do not delete it so the
 				// caller can inspect or reuse it after the run.
-				ginkgo.Skip("Skipping application deletion ΓÇö --app-name was provided, not managing lifecycle")
+				ginkgo.Skip("Skipping application deletion - --app-name was provided, not managing lifecycle")
 			}
 
 			ctx, cancel := withTimeout(15 * time.Minute)
@@ -3507,7 +3475,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 
 			uninstallOutput, uninstallErr := cli.CatalogUninstall(ctx, cfg, appRuntime)
 			if uninstallErr != nil {
-				// Non-fatal: suite results are unaffected ΓÇö catalog cleanup is best-effort.
+				// Non-fatal: suite results are unaffected - catalog cleanup is best-effort.
 				logger.Warningf("[TEARDOWN] [WARNING] Catalog uninstall failed (non-fatal): %v\nOutput: %s", uninstallErr, uninstallOutput)
 
 				return
@@ -3520,7 +3488,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			defer infoCancel()
 			infoOutput, infoErr := cli.CatalogInfo(infoCtx, cfg, appRuntime)
 			if infoErr == nil && strings.Contains(infoOutput, "Catalog Backend API is available at") {
-				logger.Warningf("[TEARDOWN] [WARNING] Catalog still appears to be running after uninstall ΓÇö output: %s", infoOutput)
+				logger.Warningf("[TEARDOWN] [WARNING] Catalog still appears to be running after uninstall - output: %s", infoOutput)
 			} else {
 				logger.Infof("[TEARDOWN] Catalog service confirmed not running after uninstall")
 			}

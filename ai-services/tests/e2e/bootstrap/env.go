@@ -62,6 +62,7 @@ func GetLLMasJudgePodDetails() (portNumber string, llmImage string) {
 	if port == "" {
 		port = defaultLLMJudgePort
 	}
+
 	return port, os.Getenv("LLM_JUDGE_IMAGE")
 }
 

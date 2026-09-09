@@ -444,11 +444,12 @@ func ValidateApplicationsTemplateCommandOutput(output string, appRuntime string)
 	return validateOpenShiftTemplateOutput(output)
 }
 
-// validateCatalogTemplateOutput validates the catalog-format template output (podman).
+// validateCatalogTemplateOutput validates the legacy-format template output (podman).
+// The templates command runs with --legacy so it reads from embedded assets
+// without requiring a live catalog API.
 func validateCatalogTemplateOutput(output string) error {
 	return checkRequiredStrings(output, "application template command", []string{
-		"Available Deployment Architectures:",
-		"Available Services:",
+		"Available application templates:",
 		"- rag",
 	})
 }

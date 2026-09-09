@@ -849,9 +849,11 @@ func ModelDownload(ctx context.Context, cfg *config.Config, templateName string,
 	return runCLI(ctx, cfg, "application model download", "application", "model", "download", "--template", templateName, "--runtime", appRuntime)
 }
 
-// TemplatesCommand runs the 'application template' command.
+// TemplatesCommand runs the 'application templates' command.
+// The --legacy flag is used so the command reads from embedded assets rather
+// than the catalog API, making it safe to call without a running catalog.
 func TemplatesCommand(ctx context.Context, cfg *config.Config, appRuntime string) (string, error) {
-	return runCLI(ctx, cfg, "application templates command run", "application", "templates", "--runtime", appRuntime)
+	return runCLI(ctx, cfg, "application templates command run", "application", "templates", "--legacy", "--runtime", appRuntime)
 }
 
 // catalogConfigureRunPTY runs 'catalog configure' via PTY with password prompts; shared by all configure variants.

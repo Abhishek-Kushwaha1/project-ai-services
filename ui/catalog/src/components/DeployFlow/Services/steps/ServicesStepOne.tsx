@@ -6,7 +6,7 @@ import {
   SharedStepOne,
   type StepOneComponentRow,
 } from "../../Shared/steps/SharedStepOne";
-import { COMPONENT_TYPES } from "@/constants";
+import { COMPONENT_TYPES, DEFAULT_RUNTIME } from "@/constants";
 
 export const StepOne: React.FC<StepProps> = ({
   title,
@@ -15,7 +15,13 @@ export const StepOne: React.FC<StepProps> = ({
   deployOptions,
   selectedServiceId,
   showNameError = false,
+  showWorkerError = false,
+  onWorkerErrorReset,
   onComponentError,
+  runtime = DEFAULT_RUNTIME,
+  workers = [],
+  isLoadingWorkers = false,
+  refetchWorkers = () => {},
 }) => {
   const { getComponentModels } = useServiceDeployStore();
   const providerSchemas = useServiceDeployStore((s) => s.providerSchemas);
@@ -24,21 +30,31 @@ export const StepOne: React.FC<StepProps> = ({
     (s) => s.componentModelsError,
   );
 
+  // Step 1 shows only known "selector" component types (embedding, vector store).
+  // Any other type — including custom types like custom_llm — belongs in Step 2.
+  const isStepOneComponentType = (type: string) =>
+    type === COMPONENT_TYPES.EMBEDDING || type === COMPONENT_TYPES.VECTOR_STORE;
+
   // Collect component types whose models failed to load (Step 1 components only).
   const failedComponentTypes = useMemo(() => {
     if (!selectedServiceId || !deployOptions.components) return [];
     return deployOptions.components
       .filter(
         (c) =>
-          c.type !== COMPONENT_TYPES.LLM &&
-          c.type !== COMPONENT_TYPES.RERANKER &&
-          !!componentModelsError[`${selectedServiceId}:${c.type}`],
+          isStepOneComponentType(c.type) &&
+          !!componentModelsError[`${selectedServiceId}:${c.type}:${runtime}`],
       )
       .map((c) => c.name || c.type);
-  }, [selectedServiceId, deployOptions.components, componentModelsError]);
+  }, [
+    selectedServiceId,
+    deployOptions.components,
+    componentModelsError,
+    runtime,
+  ]);
 
   // Build component rows for SharedStepOne.
-  // Shows all components EXCEPT llm and reranker — those belong in StepTwo.
+  // Shows only known Step 1 component types (embedding, vector store).
+  // All other types — including unknown/custom types — belong in StepTwo.
   const components = useMemo<StepOneComponentRow[]>(() => {
     if (!selectedServiceId) return [];
 
@@ -52,18 +68,21 @@ export const StepOne: React.FC<StepProps> = ({
         ?.filter(
           (c) =>
             serviceComponentTypes.includes(c.type) &&
-            c.type !== COMPONENT_TYPES.LLM &&
-            c.type !== COMPONENT_TYPES.RERANKER,
+            isStepOneComponentType(c.type),
         )
         .map((component) => {
           const selectedProviderId =
             serviceConfig.components[component.type]?.providerId || "";
 
-          const schemaKey = `${selectedServiceId}:${component.type}:${selectedProviderId}`;
+          const schemaKey = `${selectedServiceId}:${component.type}:${selectedProviderId}:${runtime}`;
           const hasModelParameter =
             providerSchemas[schemaKey]?.properties?.model !== undefined;
 
-          const models = getComponentModels(selectedServiceId, component.type);
+          const models = getComponentModels(
+            selectedServiceId,
+            component.type,
+            runtime,
+          );
           const modelOptions = models.map((m) => ({
             id: m.id,
             text: m.text,
@@ -92,6 +111,7 @@ export const StepOne: React.FC<StepProps> = ({
     selectedServiceId,
     getComponentModels,
     providerSchemas,
+    runtime,
   ]);
 
   // Set default model param for each component when its models arrive from the store.
@@ -109,7 +129,8 @@ export const StepOne: React.FC<StepProps> = ({
       if (!componentConfig || componentConfig.params?.model) return;
 
       const models =
-        componentModels[`${selectedServiceId}:${component.type}`] || [];
+        componentModels[`${selectedServiceId}:${component.type}:${runtime}`] ||
+        [];
       const matchingModel = models.find(
         (m) => m.providerId === componentConfig.providerId,
       );
@@ -140,6 +161,7 @@ export const StepOne: React.FC<StepProps> = ({
     formData.services,
     componentModels,
     onChange,
+    runtime,
   ]);
 
   const handleProviderChange = (componentType: string, providerId: string) => {
@@ -171,7 +193,11 @@ export const StepOne: React.FC<StepProps> = ({
     if (!currentComponent) return;
 
     // Resolve the provider that owns this model from the store.
-    const models = getComponentModels(selectedServiceId, componentType);
+    const models = getComponentModels(
+      selectedServiceId,
+      componentType,
+      runtime,
+    );
     const selectedModelOption = models.find((m) => m.id === model);
     if (!selectedModelOption) return;
 
@@ -204,8 +230,13 @@ export const StepOne: React.FC<StepProps> = ({
       onComponentChange={handleProviderChange}
       onModelChange={handleModelChange}
       showNameError={showNameError}
+      showWorkerError={showWorkerError}
+      onWorkerErrorReset={onWorkerErrorReset}
       failedComponentNames={failedComponentTypes}
       onComponentError={onComponentError}
+      workers={workers}
+      isLoadingWorkers={isLoadingWorkers}
+      refetchWorkers={refetchWorkers}
     />
   );
 };

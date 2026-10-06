@@ -1,8 +1,7 @@
 model: ""
+maxModelLen: 1024
 resources:
   requests:
-    cpu: "8"
-    memory: "4Gi"
+    memory: "5Gi"
   limits:
-    cpu: "8"
-    memory: "4Gi"
+    memory: "5Gi"

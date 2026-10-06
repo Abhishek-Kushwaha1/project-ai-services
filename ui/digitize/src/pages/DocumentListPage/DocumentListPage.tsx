@@ -27,8 +27,9 @@ import {
   Tooltip,
 } from '@carbon/react';
 import { Renew, TrashCan, Download, CheckmarkFilled, ErrorFilled, InProgress } from '@carbon/icons-react';
+import { DOC_STATUS } from '../../constants/jobConstants';
 import { useTheme } from '../../contexts/useTheme';
-import { listDocuments, getDocumentContent, deleteDocument, Document } from '../../services/api';
+import { listDocuments, getDocumentContent, deleteDocument, getDocumentMetadata, Document } from '../../services/api';
 import { exportToCSV, validateFilename } from '../../utils/csvExport';
 import styles from './DocumentListPage.module.scss';
 
@@ -59,6 +60,8 @@ interface DocumentListState {
   loadingContent: boolean;
   showDeleteModal: boolean;
   docToDelete: string | null;
+  duplicateNames: string[];
+  loadingDuplicates: boolean;
   isConfirmed: boolean;
   toastOpen: boolean;
   errorMessage: string;
@@ -86,6 +89,7 @@ type DocumentListAction =
   | { type: 'OPEN_CONTENT_MODAL'; payload: { doc: Document; content: DocumentContentData } }
   | { type: 'CLOSE_CONTENT_MODAL' }
   | { type: 'OPEN_DELETE_MODAL'; payload: string }
+  | { type: 'SET_DUPLICATE_NAMES'; payload: { names: string[]; loading: boolean; forDocId: string } }
   | { type: 'CLOSE_DELETE_MODAL' }
   | { type: 'CLOSE_DELETE_MODAL_KEEP_DOC' }
   | { type: 'SET_CONFIRMED'; payload: boolean }
@@ -115,6 +119,8 @@ const initialState: DocumentListState = {
   loadingContent: false,
   showDeleteModal: false,
   docToDelete: null,
+  duplicateNames: [],
+  loadingDuplicates: false,
   isConfirmed: false,
   toastOpen: false,
   errorMessage: '',
@@ -208,7 +214,17 @@ const documentListReducer = (
         ...state,
         docToDelete: action.payload,
         showDeleteModal: true,
+        duplicateNames: [],
+        loadingDuplicates: true,
         toastOpen: false,
+      };
+    case 'SET_DUPLICATE_NAMES':
+      // Guard: discard result if the modal was closed or re-opened for a different doc
+      if (action.payload.forDocId !== state.docToDelete) return state;
+      return {
+        ...state,
+        duplicateNames: action.payload.names,
+        loadingDuplicates: action.payload.loading,
       };
     case 'CLOSE_DELETE_MODAL':
       return {
@@ -216,12 +232,16 @@ const documentListReducer = (
         showDeleteModal: false,
         isConfirmed: false,
         docToDelete: null,
+        duplicateNames: [],
+        loadingDuplicates: false,
       };
     case 'CLOSE_DELETE_MODAL_KEEP_DOC':
       return {
         ...state,
         showDeleteModal: false,
         isConfirmed: false,
+        duplicateNames: [],
+        loadingDuplicates: false,
       };
     case 'SET_CONFIRMED':
       return { ...state, isConfirmed: action.payload };
@@ -298,18 +318,21 @@ const headers = [
 
 const getStatusIcon = (status: string) => {
   switch (status) {
-    case 'completed':
+    case DOC_STATUS.COMPLETED:
       return <CheckmarkFilled size={16} className={styles.statusIconSuccess} />;
-    case 'failed':
+    case DOC_STATUS.FAILED:
       return <ErrorFilled size={16} className={styles.statusIconError} />;
-    case 'accepted':
-    case 'in_progress':
-    case 'digitized':
-    case 'processed':
-    case 'chunked':
+    case DOC_STATUS.ACCEPTED:
+    case DOC_STATUS.IN_PROGRESS:
+    case DOC_STATUS.DIGITIZED:
+    case DOC_STATUS.PROCESSED:
+    case DOC_STATUS.CHUNKED:
       return <InProgress size={16} className={styles.statusIconProgress} />;
-    case 'already_exists':
+    case DOC_STATUS.ALREADY_EXISTS:
+    case DOC_STATUS.COMPLETED_WITH_ERRORS:
       return <CheckmarkFilled size={16} className={styles.statusIconWarning} />;
+    case DOC_STATUS.CANCELLED:
+      return <ErrorFilled size={16} className={styles.statusIconCancelled} />;
     default:
       return null;
   }
@@ -480,6 +503,23 @@ const DocumentListPage = () => {
     }
   };
 
+  const handleOpenDeleteModal = async (docId: string) => {
+    dispatch({ type: 'OPEN_DELETE_MODAL', payload: docId });
+    try {
+      const detail = await getDocumentMetadata(docId, true);
+      dispatch({
+        type: 'SET_DUPLICATE_NAMES',
+        payload: { names: detail.duplicate_names ?? [], loading: false, forDocId: docId },
+      });
+    } catch {
+      // Non-critical — proceed without duplicate names
+      dispatch({
+        type: 'SET_DUPLICATE_NAMES',
+        payload: { names: [], loading: false, forDocId: docId },
+      });
+    }
+  };
+
   const handleDeleteConfirm = async () => {
     if (!state.docToDelete) return;
 
@@ -605,7 +645,7 @@ const DocumentListPage = () => {
       name: doc.name || doc.filename || 'N/A',
       status: (
         <div className={styles.statusCell}>
-          {getStatusIcon(doc.status)}
+          {!hasError && getStatusIcon(doc.status)}
           <span className={styles.statusText}>{doc.status}</span>
           {hasError && (
             <Tooltip
@@ -651,7 +691,7 @@ const DocumentListPage = () => {
           size="sm"
           renderIcon={TrashCan}
           iconDescription="Delete"
-          onClick={() => dispatch({ type: 'OPEN_DELETE_MODAL', payload: doc.id })}
+          onClick={() => handleOpenDeleteModal(doc.id)}
         />
       ),
     };
@@ -893,6 +933,21 @@ const DocumentListPage = () => {
               }
             />
           </CheckboxGroup>
+          {state.loadingDuplicates && (
+            <p className={styles.duplicatesHelperText}>Checking for duplicates…</p>
+          )}
+          {!state.loadingDuplicates && state.duplicateNames.length > 0 && (
+            <div className={styles.duplicatesSection}>
+              <p className={styles.duplicatesHelperText}>
+                The following duplicate entries will also be removed:
+              </p>
+              <ul className={styles.duplicatesList}>
+                {state.duplicateNames.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </Modal>
 

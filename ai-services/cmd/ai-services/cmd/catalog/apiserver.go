@@ -26,6 +26,7 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/utils"
 	"github.com/project-ai-services/ai-services/internal/pkg/vars"
+	workerConstants "github.com/project-ai-services/ai-services/internal/pkg/worker/constants"
 	workerregistry "github.com/project-ai-services/ai-services/internal/pkg/worker/registry"
 	"github.com/spf13/cobra"
 )
@@ -142,14 +143,14 @@ func buildAPIServerOptions(ctx context.Context, pool *pgxpool.Pool, secretKey, a
 		return apiserver.APIServerOptions{}, nil, fmt.Errorf("failed to initialize catalog provider: %w", err)
 	}
 
-	datasourceSvc, err := apirepository.NewDatasourceService(connectorRepo, appRepo, svcDepRepo, catalogProvider)
-	if err != nil {
-		return apiserver.APIServerOptions{}, nil, fmt.Errorf("failed to initialize datasource service: %w", err)
-	}
-
 	tokenMgr := auth.NewTokenManager(secretKey, accessTTL, refreshTTL)
 	workerRepo := repository.NewWorkerRepository(pool)
 	workerReg := workerregistry.New(workerRepo)
+
+	datasourceSvc, err := apirepository.NewDatasourceService(connectorRepo, appRepo, svcDepRepo, catalogProvider, workerReg)
+	if err != nil {
+		return apiserver.APIServerOptions{}, nil, fmt.Errorf("failed to initialize datasource service: %w", err)
+	}
 
 	stopBackgroundServices, err := startBackgroundServices(ctx, appRepo, svcRepo, compRepo, svcDepRepo, connectorRepo, catalogProvider, workerReg, encryptionKey)
 	if err != nil {
@@ -271,7 +272,7 @@ Note:
 	apiserverCmd.Flags().DurationVarP(&defaultRefreshTokenTTL, "refresh-token-ttl", "", defaultRefreshTokenTTL, "Time-to-live for refresh tokens")
 	apiserverCmd.Flags().StringVar(&adminUserName, "admin-username", "admin", "Username for the default admin user")
 	apiserverCmd.Flags().StringVar(&adminPasswordHash, "admin-password-hash", "", "Precomputed hash of the password for the default admin user")
-	apiserverCmd.Flags().IntVar(&workerGatewayPort, "workergateway-port", defaultWorkerGatewayPort, "Port for the gRPC worker gateway (always active, default 9090)")
+	apiserverCmd.Flags().IntVar(&workerGatewayPort, "workergateway-port", workerConstants.WorkerGatewayPort, "Port for the gRPC worker gateway (always active, default 9191)")
 	apiserverCmd.Flags().StringVar(&manageiqURL, "manageiq-url", "", "ManageIQ base URL for AuthN/AuthZ, e.g. https://9.20.202.144:8443")
 	apiserverCmd.Flags().BoolVar(&manageiqInsecure, "manageiq-insecure-tls", false, "Skip TLS verification for ManageIQ (self-signed certs)")
 	// Hide the ManageIQ flags

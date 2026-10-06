@@ -2,6 +2,8 @@ FROM localhost/prebuilder as prebuilder
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.8
 
+RUN microdnf update -y --disablerepo='*' --enablerepo='ubi-9-*' && microdnf clean all
+
 RUN microdnf install -y python3.12-devel \
         lcms2-devel openblas-devel freetype libicu libjpeg-turbo && \
     curl -o /tmp/epel-release.rpm https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
@@ -9,15 +11,28 @@ RUN microdnf install -y python3.12-devel \
     rm -f /tmp/epel-release.rpm && \
     microdnf install -y spatialindex-devel && \
     microdnf clean all && \
-    curl -sSL https://bootstrap.pypa.io/get-pip.py | python3.12 - && \
     rm -rf /usr/bin/python && rm -rf /usr/bin/python3 && \
     ln -s /usr/bin/python3.12 /usr/bin/python && ln -s /usr/bin/python3.12 /usr/bin/python3
 
 ENV DOCLING_MODELS_PATH=/var/docling-models
+# Disable hf-xet (Rust/Tokio Xet transfer extension) during the model download
+# build step. hf-xet 1.x initialises a global Tokio multi-thread runtime on
+# import; when huggingface_hub calls into it from within a Tokio worker thread
+# the Rust runtime tries to re-enter Python's import machinery from a thread
+# that already owns the GIL bootstrap lock, producing:
+#   Fatal Python error: _PyImport_Init: global import state already initialized
+# The docling models are served from standard HuggingFace Hub storage, not xet,
+# so disabling xet has no effect on download behaviour or speed.
+ENV HF_HUB_DISABLE_XET=1
 
 COPY requirements.txt .
 COPY download_docling_models.py .
 
+# `python -m venv` bootstraps its own pip via the stdlib ensurepip module, so no
+# separate get-pip.py bootstrap is needed. pip is only used to install the packages
+# below; it is not used at runtime. Strip the extracted pip from the venv afterwards
+# so the runtime image ships no pip -- and none of pip's vendored libraries
+# (requests, urllib3, certifi, ...) or its CycloneDX SBOM that scanners flag.
 RUN --mount=type=bind,from=prebuilder,source=/wheels,target=/wheels,ro \
     python -m venv /var/venv && source /var/venv/bin/activate && \
     pip install --upgrade pip && \
@@ -26,4 +41,7 @@ RUN --mount=type=bind,from=prebuilder,source=/wheels,target=/wheels,ro \
         --prefer-binary && \
     pip cache purge && \
     python download_docling_models.py && \
-    rm -rf ~/.cache/huggingface
+    rm -rf ~/.cache/huggingface && \
+    rm -rf /var/venv/lib/python3.12/site-packages/pip \
+           /var/venv/lib/python3.12/site-packages/pip-*.dist-info \
+           /var/venv/bin/pip /var/venv/bin/pip3 /var/venv/bin/pip3.12

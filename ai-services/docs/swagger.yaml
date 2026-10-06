@@ -538,10 +538,16 @@ definitions:
         type: string
       name:
         type: string
+      namespace:
+        type: string
+      runtime_type:
+        type: string
       services:
         items:
           $ref: '#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.Pod'
         type: array
+      worker_name:
+        type: string
     type: object
   github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ApplicationResourcesResponse:
     properties:
@@ -989,8 +995,6 @@ definitions:
   internal_pkg_catalog_apiserver_handlers.createWorkerReq:
     properties:
       worker_name:
-        maxLength: 100
-        minLength: 1
         type: string
     required:
     - worker_name
@@ -1630,6 +1634,7 @@ paths:
         The response always includes catalog asset images (the tool image used for housekeeping tasks
         and the catalog infrastructure images for the catalog service itself).
         Both embedded (built-in) and custom bundle architectures are supported.
+        Not supported on OpenShift deployments.
       parameters:
       - description: Architecture ID (e.g., 'rag')
         in: path
@@ -1651,6 +1656,10 @@ paths:
             $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
         "404":
           description: Architecture not found
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+        "422":
+          description: Not supported on OpenShift deployments
           schema:
             $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
         "500":
@@ -2478,10 +2487,9 @@ paths:
     get:
       description: |-
         Retrieves system resource information including CPU, memory, and accelerator availability.
-        When the optional `worker` query parameter is provided, the resources are fetched from
-        that remote worker node instead of the local runtime.
+        Defaults to the local worker when the `worker` query parameter is omitted.
       parameters:
-      - description: Worker name to query resources from
+      - description: 'Worker name to query resources from (default: Local)'
         in: query
         name: worker
         type: string
@@ -2619,6 +2627,7 @@ paths:
         The response always includes catalog asset images (the tool image used for housekeeping tasks
         and the catalog infrastructure images for the catalog service itself).
         Both embedded (built-in) and custom bundle services are supported.
+        Not supported on OpenShift deployments.
       parameters:
       - description: Service ID (e.g., 'chat', 'digitize', 'summarize')
         in: path
@@ -2640,6 +2649,10 @@ paths:
             $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
         "404":
           description: Service not found
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+        "422":
+          description: Not supported on OpenShift deployments
           schema:
             $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
         "500":
@@ -2828,6 +2841,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "409":
+          description: Worker is already registered and ready
+          schema:
+            additionalProperties: true
+            type: object
         "500":
           description: Internal error
           schema:
@@ -2866,6 +2884,11 @@ paths:
             type: object
         "404":
           description: Worker not found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Worker still has applications deployed on it
           schema:
             additionalProperties: true
             type: object

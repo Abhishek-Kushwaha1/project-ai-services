@@ -113,7 +113,7 @@ type Route struct {
 
 // HTTPProxy is the request payload for COMMAND_TYPE_HTTP_PROXY.
 // The control plane sends this; the worker executes the HTTP request locally
-// against a pod endpoint and returns a types.HTTPProxyResponse.
+// against a pod endpoint and returns an httpproxy.Response.
 type HTTPProxy struct {
 	Method    string            `json:"method"`
 	TargetURL string            `json:"target_url"`
@@ -192,4 +192,10 @@ type UpdateSecret struct {
 type WaitInferenceService struct {
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
+}
+
+// CancelCommand is the wire payload for COMMAND_TYPE_CANCEL.
+// CommandID is the ID of the previously-dispatched command to abort.
+type CancelCommand struct {
+	CommandID string `json:"command_id"`
 }

@@ -19,8 +19,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch, mock_open
 
 import pytest
 
-from extract.utils.exceptions import ExtractException
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -188,7 +186,12 @@ class TestCreateExtractJob:
                 files=files,
             )
         assert resp.status_code == 413
-        assert resp.json()["error"]["code"] == "TOO_MANY_FILES"
+        error = resp.json()["error"]
+        assert error["code"] == "REQUEST_TOO_LARGE"
+        # details must carry submitted count and the limit
+        details = error.get("details", {})
+        assert details.get("submitted") == limit + 1
+        assert details.get("limit") == limit
 
     def test_404_unknown_schema(self, extract_test_client):
         with patch("extract.api.v1.jobs.db_repo.get_schema_by_id", return_value=None), \
@@ -198,7 +201,7 @@ class TestCreateExtractJob:
             resp = self._post_single(extract_test_client, schema_id="nonexistent")
 
         assert resp.status_code == 404
-        assert resp.json()["error"]["code"] == "SCHEMA_NOT_FOUND"
+        assert resp.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
 
     def test_415_invalid_extension(self, extract_test_client):
         with patch("extract.api.v1.jobs.validate_file_extension", return_value=(False, "")), \
@@ -215,7 +218,13 @@ class TestCreateExtractJob:
         async def _side_effect(file):
             call_count[0] += 1
             if file.filename == "bad.txt":
-                raise ExtractException(415, "BAD_REQUEST", "File contains null bytes.")
+                from fastapi import HTTPException as _HTTPException
+                raise _HTTPException(
+                    status_code=415,
+                    detail={"error": {"code": "INVALID_FILE_CONTENT",
+                                      "message": "File contains null bytes.",
+                                      "status": 415}},
+                )
 
         with patch("extract.api.v1.jobs.db_repo.get_schema_by_id", return_value=_mock_schema_row()), \
              patch("extract.api.v1.jobs.validate_file_extension", return_value=(True, ".txt")), \
@@ -233,8 +242,8 @@ class TestCreateExtractJob:
         assert resp.status_code == 415
         body = resp.json()
         assert body["error"]["code"] == "INVALID_FILE_CONTENT"
-        assert len(body["error"]["details"]) == 1
         assert body["error"]["details"][0]["filename"] == "bad.txt"
+        assert body["error"]["details"][0]["index"] == 1
 
     def test_429_extract_limiter_full(self, extract_test_client):
         locked = Mock()
@@ -283,6 +292,102 @@ class TestCreateExtractJob:
 
         assert resp.status_code == 500
         assert resp.json()["error"]["code"] == "DATABASE_ERROR"
+
+    def test_202_by_schema_name(self, extract_test_client):
+        schema_row = _mock_schema_row()
+        with patch("extract.api.v1.jobs.resolve_schema_input", return_value=schema_row) as mock_resolve, \
+             patch("extract.api.v1.jobs.validate_file_extension", return_value=(True, ".txt")), \
+             patch("extract.api.v1.jobs.stage_multiple_files"), \
+             patch("extract.api.v1.jobs.db_repo.create_job", return_value=_mock_job_row(status="accepted")), \
+             patch("extract.api.v1.jobs.db_repo.create_documents", return_value=True), \
+             patch("extract.api.v1.jobs.validate_file_content", new=AsyncMock()), \
+             patch("extract.api.v1.jobs.process_batch_job", new=AsyncMock()), \
+             _patch_extract_limiter_free():
+            resp = extract_test_client.post(
+                "/v1/extract/jobs",
+                data={"schema_name": "my-schema"},
+                files=[("files", ("doc.txt", b"content", "text/plain"))],
+            )
+
+        assert resp.status_code == 202
+        body = resp.json()
+        assert "job_id" in body
+        mock_resolve.assert_called_once()
+
+    def test_202_by_json_schema(self, extract_test_client):
+        from extract.utils.schema import _EphemeralSchemaRow
+        ephemeral_row = _EphemeralSchemaRow(json_schema={"type": "object"})
+        registered_row = _mock_schema_row(schema_id="ephemeral-123")
+        
+        with patch("extract.api.v1.jobs.resolve_schema_input", return_value=ephemeral_row), \
+             patch("extract.api.v1.jobs.db_repo.create_schema", return_value=registered_row) as mock_create_schema, \
+             patch("extract.api.v1.jobs.validate_file_extension", return_value=(True, ".txt")), \
+             patch("extract.api.v1.jobs.stage_multiple_files"), \
+             patch("extract.api.v1.jobs.db_repo.create_job", return_value=_mock_job_row(status="accepted", schema_id="ephemeral-123")), \
+             patch("extract.api.v1.jobs.db_repo.create_documents", return_value=True), \
+             patch("extract.api.v1.jobs.validate_file_content", new=AsyncMock()), \
+             patch("extract.api.v1.jobs.process_batch_job", new=AsyncMock()), \
+             _patch_extract_limiter_free():
+            resp = extract_test_client.post(
+                "/v1/extract/jobs",
+                data={"json_schema": '{"type": "object"}'},
+                files=[("files", ("doc.txt", b"content", "text/plain"))],
+            )
+
+        assert resp.status_code == 202
+        body = resp.json()
+        assert "job_id" in body
+        mock_create_schema.assert_called_once()
+
+    def test_202_by_json_example(self, extract_test_client):
+        from extract.utils.schema import _EphemeralSchemaRow
+        ephemeral_row = _EphemeralSchemaRow(json_schema={"type": "object"})
+        registered_row = _mock_schema_row(schema_id="ephemeral-456")
+        
+        with patch("extract.api.v1.jobs.resolve_schema_input", return_value=ephemeral_row), \
+             patch("extract.api.v1.jobs.db_repo.create_schema", return_value=registered_row) as mock_create_schema, \
+             patch("extract.api.v1.jobs.validate_file_extension", return_value=(True, ".txt")), \
+             patch("extract.api.v1.jobs.stage_multiple_files"), \
+             patch("extract.api.v1.jobs.db_repo.create_job", return_value=_mock_job_row(status="accepted", schema_id="ephemeral-456")), \
+             patch("extract.api.v1.jobs.db_repo.create_documents", return_value=True), \
+             patch("extract.api.v1.jobs.validate_file_content", new=AsyncMock()), \
+             patch("extract.api.v1.jobs.process_batch_job", new=AsyncMock()), \
+             _patch_extract_limiter_free():
+            resp = extract_test_client.post(
+                "/v1/extract/jobs",
+                data={"json_example": '{"name": "Alice"}'},
+                files=[("files", ("doc.txt", b"content", "text/plain"))],
+            )
+
+        assert resp.status_code == 202
+        body = resp.json()
+        assert "job_id" in body
+        mock_create_schema.assert_called_once()
+
+    def test_400_all_schema_params_missing(self, extract_test_client):
+        with patch("extract.api.v1.jobs.validate_file_extension", return_value=(True, ".txt")), \
+             patch("extract.api.v1.jobs.validate_file_content", new=AsyncMock()), \
+             _patch_extract_limiter_free():
+            resp = extract_test_client.post(
+                "/v1/extract/jobs",
+                data={},
+                files=[("files", ("doc.txt", b"content", "text/plain"))],
+            )
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "INVALID_REQUEST"
+
+    def test_400_invalid_json_schema_format(self, extract_test_client):
+        with patch("extract.api.v1.jobs.validate_file_extension", return_value=(True, ".txt")), \
+             patch("extract.api.v1.jobs.validate_file_content", new=AsyncMock()), \
+             _patch_extract_limiter_free():
+            resp = extract_test_client.post(
+                "/v1/extract/jobs",
+                data={"json_schema": "not-valid-json"},
+                files=[("files", ("doc.txt", b"content", "text/plain"))],
+            )
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "INVALID_REQUEST"
+        assert "json_schema is not valid JSON" in resp.json()["error"]["message"]
 
 
     # ── schema_name form field ────────────────────────────────────────────
@@ -401,7 +506,7 @@ class TestCreateExtractJob:
         mock_by_name.assert_not_called()
 
     def test_404_unknown_schema_name(self, extract_test_client):
-        """schema_name that does not exist → 404 SCHEMA_NOT_FOUND."""
+        """schema_name that does not exist → 404 RESOURCE_NOT_FOUND."""
         with patch("extract.api.v1.jobs.db_repo.get_schema_by_name", return_value=None), \
              patch("extract.api.v1.jobs.validate_file_extension", return_value=(True, ".txt")), \
              patch("extract.api.v1.jobs.validate_file_content", new=AsyncMock()), \
@@ -413,7 +518,7 @@ class TestCreateExtractJob:
             )
 
         assert resp.status_code == 404
-        assert resp.json()["error"]["code"] == "SCHEMA_NOT_FOUND"
+        assert resp.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
 
 
 # ---------------------------------------------------------------------------
@@ -937,13 +1042,13 @@ class TestBulkDeleteExtractJobs:
     def test_400_missing_confirm(self, extract_test_client):
         resp = extract_test_client.delete("/v1/extract/jobs")
         assert resp.status_code == 400
-        assert resp.json()["error"]["code"] == "CONFIRMATION_REQUIRED"
+        assert resp.json()["error"]["code"] == "INVALID_REQUEST"
 
     def test_400_confirm_not_true(self, extract_test_client):
         for val in ("false", "yes", "1"):
             resp = extract_test_client.delete(f"/v1/extract/jobs?confirm={val}")
             assert resp.status_code == 400, f"Expected 400 for confirm={val}"
-            assert resp.json()["error"]["code"] == "CONFIRMATION_REQUIRED"
+            assert resp.json()["error"]["code"] == "INVALID_REQUEST"
 
     def test_409_active_jobs_exist(self, extract_test_client):
         with patch("extract.api.v1.jobs.db_repo.has_active_jobs", return_value=True):

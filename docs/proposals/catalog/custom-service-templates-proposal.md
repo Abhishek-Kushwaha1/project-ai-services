@@ -1866,7 +1866,7 @@ maxBatchSize: 32
 
 ```yaml
 # components/llm/watsonx/podman/values.yaml
-image: "icr.io/ai-services-cicd/litellm:v1.89.3-1"
+image: "icr.io/ai-services-cicd/litellm:v1.101.0-0"
 model: "ibm/granite-4-h-small"
 watsonxApiKey: ""
 watsonxProjectId: ""
@@ -2017,7 +2017,7 @@ Custom component templates may adopt the same pattern for any key name. The `.en
 
 ```bash
 # Log in once — credentials are stored for subsequent commands
-ai-services catalog login --server https://catalog-api.<domain> --username admin --runtime podman
+ai-services catalog login --server https://catalog-api.<domain> --username admin
 
 # Package the service directory (top-level dir name is irrelevant)
 COPYFILE_DISABLE=1 tar -czf my-bundle.tar.gz my-service/

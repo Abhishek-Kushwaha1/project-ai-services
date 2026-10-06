@@ -9,12 +9,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	catalogConstants "github.com/project-ai-services/ai-services/internal/pkg/catalog/constants"
 	catalogUtils "github.com/project-ai-services/ai-services/internal/pkg/catalog/utils"
 	cliUtils "github.com/project-ai-services/ai-services/internal/pkg/cli/utils"
+	"github.com/project-ai-services/ai-services/internal/pkg/constants"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	podmanRuntime "github.com/project-ai-services/ai-services/internal/pkg/runtime/podman"
 	pkgutils "github.com/project-ai-services/ai-services/internal/pkg/utils"
 	"github.com/project-ai-services/ai-services/internal/pkg/utils/sanitize"
+	workercommon "github.com/project-ai-services/ai-services/internal/pkg/worker/common"
+	workerConstants "github.com/project-ai-services/ai-services/internal/pkg/worker/constants"
 )
 
 const (
@@ -67,15 +71,9 @@ func (g *podmanGatherer) gather(ctx context.Context, opts gatherOptions) (string
 	}
 
 	if catalogInstalled {
-		g.resolveBaseDir(ctx, rt)
-	}
-
-	if catalogInstalled {
-		g.collectCatalogArtifacts(ctx, outDir)
-		_ = collectApplicationPods(ctx, g, outDir, opts.applicationName)
-		g.collectModelsInfo(ctx, outDir)
+		g.collectCatalogInstalled(ctx, rt, outDir, opts.applicationName)
 	} else {
-		logger.WarninglnCtx(ctx, "No catalog pods found — catalog is not installed. Skipping application pods, catalog artifacts, and models collection.")
+		g.collectWorkerOnly(ctx, rt, outDir, opts.applicationName)
 	}
 
 	// Always collected — independent of catalog state.
@@ -87,6 +85,35 @@ func (g *podmanGatherer) gather(ctx context.Context, opts gatherOptions) (string
 	return outDir, nil
 }
 
+func (g *podmanGatherer) collectCatalogInstalled(ctx context.Context, rt *podmanRuntime.PodmanClient, outDir, appName string) {
+	g.resolveBaseDir(ctx, rt)
+	g.collectCatalogArtifacts(ctx, outDir)
+
+	isLocalWorker, err := workercommon.IsPodmanLocalWorker(ctx, rt)
+	if err != nil {
+		logger.WarningfCtx(ctx, "Failed to check local worker: %v\n", err)
+	} else if isLocalWorker {
+		g.collectWorkerArtifacts(ctx, outDir)
+		_ = collectApplicationPods(ctx, g, outDir, appName, workerConstants.LocalWorkerName)
+	}
+
+	g.collectModelsInfo(ctx, outDir)
+}
+
+func (g *podmanGatherer) collectWorkerOnly(ctx context.Context, rt *podmanRuntime.PodmanClient, outDir, appName string) {
+	logger.InfolnCtx(ctx, "No catalog pods found on this node. Collecting worker and application pods...")
+	g.collectWorkerArtifacts(ctx, outDir)
+
+	workerName, err := workercommon.ResolveWorkerName(ctx, rt)
+	if err != nil {
+		logger.WarningfCtx(ctx, "Failed to resolve worker name: %v\n", err)
+
+		return
+	}
+
+	_ = collectApplicationPods(ctx, g, outDir, appName, workerName)
+}
+
 // resolveBaseDir attempts to read AI_SERVICES_BASE_DIR from the running
 // catalog backend container env (same approach as `catalog configure --reset-*`).
 // Sets g.baseDir to the resolved value, or to the default if the backend pod
@@ -94,9 +121,10 @@ func (g *podmanGatherer) gather(ctx context.Context, opts gatherOptions) (string
 func (g *podmanGatherer) resolveBaseDir(ctx context.Context, rt *podmanRuntime.PodmanClient) {
 	g.baseDir = pkgutils.GetBaseDir() // safe fallback
 
-	config, _, err := catalogUtils.GetCatalogPodConfig(ctx, rt)
+	catalogPodLabel := constants.PodComponentKey + "=" + catalogConstants.CatalogComponentValue
+	config, _, err := catalogUtils.GetCatalogPodConfig(ctx, rt, catalogPodLabel)
 	if err != nil {
-		if errors.Is(err, catalogUtils.ErrCatalogPodNotFound) {
+		if errors.Is(err, cliUtils.ErrPodNotFound) {
 			logger.WarninglnCtx(ctx, "Catalog backend pod is stopped — base directory resolved to default.")
 		} else {
 			logger.WarningfCtx(ctx, "Could not read base dir from catalog pod: %v; using default.\n", err)
@@ -208,7 +236,6 @@ func (g *podmanGatherer) collectContainerLogs(ctx context.Context, podDir, name 
 // collectCatalogArtifacts gathers data for the catalog infrastructure
 // (always collected, regardless of --application):
 //   - catalog pods (ai-services--catalog, ai-services--db, ai-services--caddy)
-//   - Caddyfile from <BaseDir>/common/caddy/ (reverse-proxy route config)
 //   - catalog-credentials.json with tokens redacted
 func (g *podmanGatherer) collectCatalogArtifacts(ctx context.Context, outDir string) {
 	logger.InfolnCtx(ctx, "Collecting catalog artifacts…")
@@ -220,41 +247,44 @@ func (g *podmanGatherer) collectCatalogArtifacts(ctx context.Context, outDir str
 		return
 	}
 
-	g.collectCatalogPods(ctx, catDir)
-	g.collectCaddyfile(ctx, catDir)
+	g.collectPodsByTemplate(ctx, catDir, catalogConstants.CatalogAppTemplate)
 	collectCatalogCredentials(ctx, g.sanitizer, catDir)
 }
 
-// collectCatalogPods lists all pods labelled ai-services.io/application=ai-services
-// and delegates to collectPod for each one.
-func (g *podmanGatherer) collectCatalogPods(ctx context.Context, catDir string) {
+// collectWorkerArtifacts gathers data for the worker infrastructure (into worker/pods/).
+func (g *podmanGatherer) collectWorkerArtifacts(ctx context.Context, outDir string) {
+	workerDir := filepath.Join(outDir, "worker")
+	g.collectPodsByTemplate(ctx, workerDir, workerConstants.WorkerAppTemplate)
+}
+
+// collectPodsByTemplate lists all pods belonging to a given template
+// (e.g. template=catalog or template=worker) and delegates to collectPod for each one.
+func (g *podmanGatherer) collectPodsByTemplate(ctx context.Context, targetDir, templateName string) {
 	raw, err := cliUtils.PodmanRun(
 		"pod", "ps",
-		"--filter", "label=ai-services.io/application=ai-services",
+		"--filter", fmt.Sprintf("label=%s=%s", constants.ApplicationTemplateKey, templateName),
 		"--format", "json",
 	)
 	if err != nil {
-		logger.WarningfCtx(ctx, "Failed to list catalog pods: %v\n", err)
+		logger.WarningfCtx(ctx, "Failed to list %s pods: %v\n", templateName, err)
 
 		return
 	}
 
 	var pods []map[string]any
 	if err := json.Unmarshal(raw, &pods); err != nil {
-		logger.WarningfCtx(ctx, "Failed to parse catalog pod list: %v\n", err)
+		logger.WarningfCtx(ctx, "Failed to parse %s pod list: %v\n", templateName, err)
 
 		return
 	}
 
 	if len(pods) == 0 {
-		logger.WarninglnCtx(ctx, "No catalog pods found (catalog may not be configured).")
-
 		return
 	}
 
-	podsDir := filepath.Join(catDir, "pods")
+	podsDir := filepath.Join(targetDir, "pods")
 	if err := os.MkdirAll(podsDir, dirPerm); err != nil {
-		logger.WarningfCtx(ctx, "Failed to create catalog pods directory: %v\n", err)
+		logger.WarningfCtx(ctx, "Failed to create %s pods directory: %v\n", templateName, err)
 
 		return
 	}
@@ -266,44 +296,7 @@ func (g *podmanGatherer) collectCatalogPods(ctx context.Context, catDir string) 
 			continue
 		}
 
-		g.collectPod(ctx, podsDir, name, "") // catalog pods have no app-scoped namespace
-	}
-}
-
-// collectCaddyfile copies:
-//   - <BaseDir>/common/caddy/Caddyfile        — static reverse-proxy config
-//   - <BaseDir>/common/caddy-config/caddy/autosave.json — Caddy's live config snapshot
-func (g *podmanGatherer) collectCaddyfile(ctx context.Context, catDir string) {
-	caddyFiles := []struct {
-		src      string
-		dst      string
-		sanitize func([]byte) []byte
-	}{
-		{
-			src:      filepath.Join(g.baseDir, "common", "caddy", "Caddyfile"),
-			dst:      "Caddyfile",
-			sanitize: g.sanitizer.SanitizeText,
-		},
-		{
-			src:      filepath.Join(g.baseDir, "common", "caddy-config", "caddy", "autosave.json"),
-			dst:      "caddy-autosave.json",
-			sanitize: g.sanitizer.SanitizeJSON,
-		},
-	}
-
-	for _, f := range caddyFiles {
-		data, err := os.ReadFile(f.src)
-		if err != nil {
-			if os.IsNotExist(err) {
-				logger.WarningfCtx(ctx, "%s not found (catalog may not be configured)\n", f.src)
-			} else {
-				logger.WarningfCtx(ctx, "Failed to read %s: %v\n", f.src, err)
-			}
-
-			continue
-		}
-
-		writeFile(ctx, catDir, f.dst, f.sanitize(data))
+		g.collectPod(ctx, podsDir, name, "") // infrastructure pods have no app-scoped namespace
 	}
 }
 

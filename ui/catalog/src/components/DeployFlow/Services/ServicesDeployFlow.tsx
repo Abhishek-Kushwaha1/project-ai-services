@@ -1,5 +1,13 @@
-import { useReducer, useEffect, useRef, useMemo, useState } from "react";
+import {
+  useReducer,
+  useEffect,
+  useRef,
+  useMemo,
+  useState,
+  useCallback,
+} from "react";
 import { COMPONENT_TYPES } from "@/constants";
+import { useWorkers } from "@/hooks/useWorkers";
 import type {
   ServicesDeployFlowProps,
   DeployFlowState,
@@ -10,6 +18,7 @@ import {
   sharedDeployFlowReducer,
   useDeployFlowReducer,
 } from "../Shared/hooks/useDeployFlowReducer";
+import { getRequiredFieldKeys } from "../Shared/utils/paramFilter";
 import { deployApplication } from "@/api/applications.api";
 import { transformToDeploymentPayload } from "./utils/serviceDeploymentTransform";
 import { runDeployment } from "../Shared/utils/runDeployment";
@@ -17,12 +26,16 @@ import { DeployTearsheetShell } from "../Shared/components/DeployTearsheetShell"
 import { StepOne } from "./steps/ServicesStepOne";
 import { ServicesStepTwo as StepTwo } from "./steps/ServicesStepTwo";
 import { StepZero } from "./steps/StepZero";
+import { SharedDatasourceStep } from "../Shared/steps/SharedDatasourceStep";
 import { useServiceDeployOptions } from "./hooks/useServiceDeployOptions";
 import { useServiceDeployStore } from "@/store/serviceDeploy.store";
 import { initializeFormData } from "./utils/formDataInitializer";
-import { BASE_INITIAL_STATE } from "../Shared/utils/formData";
+import {
+  BASE_INITIAL_STATE,
+  DEFAULT_FORM_DATA,
+} from "../Shared/utils/formData";
 
-const STEPS = [
+const BASE_STEPS = [
   {
     label: "Select service",
     description: "Choose a service to deploy",
@@ -36,8 +49,13 @@ const STEPS = [
     description: "Select and configure service",
   },
 ];
+
+const DATASOURCE_STEP = {
+  label: "Select data sources",
+  description: "Connect data sources to your service",
+};
+
 const STEP_ONE = 1;
-const LAST_STEP = STEPS.length - 1;
 
 const getInitialState = (): DeployFlowState => ({
   ...BASE_INITIAL_STATE,
@@ -46,9 +64,14 @@ const getInitialState = (): DeployFlowState => ({
     version: "",
     globalComponents: {},
     services: {},
+    ...DEFAULT_FORM_DATA,
+    dataSources: [],
+    uploadFromSourceEnabled: false,
   },
   selectedServiceId: null,
   currentStep: 0,
+  hasDatasourceStepError: false,
+  showDatasourceSelectionError: false,
 });
 
 const servicesDeployFlowReducer = (
@@ -58,6 +81,10 @@ const servicesDeployFlowReducer = (
   switch (action.type) {
     case ACTION_TYPES.SET_SELECTED_SERVICE:
       return { ...state, selectedServiceId: action.payload };
+    case ACTION_TYPES.SET_DATASOURCE_STEP_ERROR:
+      return { ...state, hasDatasourceStepError: action.payload };
+    case ACTION_TYPES.SET_SHOW_DATASOURCE_SELECTION_ERROR:
+      return { ...state, showDatasourceSelectionError: action.payload };
     case ACTION_TYPES.RESET_STATE:
       return getInitialState();
     default:
@@ -72,6 +99,13 @@ export const ServicesDeployFlow = ({
   preSelectedServiceId,
 }: ServicesDeployFlowProps) => {
   const [hasStep2SchemaError, setHasStep2SchemaError] = useState(false);
+
+  const {
+    workers,
+    isLoading: isLoadingWorkers,
+    refetch: refetchWorkers,
+  } = useWorkers();
+
   const [state, dispatch] = useReducer(servicesDeployFlowReducer, {
     ...getInitialState(),
     selectedServiceId: preSelectedServiceId ?? null,
@@ -81,14 +115,38 @@ export const ServicesDeployFlow = ({
   // Track if form data has been initialized for the current service to prevent re-initialization
   const hasInitializedFormData = useRef<string | null>(null);
 
+  const runtime = state.formData.deploymentType;
+
   // Only fetch deploy options when on step 1 or later (after user clicks Next)
   const shouldFetchDeployOptions =
     state.currentStep >= STEP_ONE && state.selectedServiceId;
-  const { deployOptions, llmModels, isLoading, error, llmError } =
-    useServiceDeployOptions(
-      shouldFetchDeployOptions ? state.selectedServiceId : null,
-      open,
-    );
+  const {
+    deployOptions,
+    serviceSchema,
+    serviceSchemaError,
+    llmModels,
+    isLoading,
+    error,
+    llmError,
+  } = useServiceDeployOptions(
+    shouldFetchDeployOptions ? state.selectedServiceId : null,
+    open,
+    runtime,
+  );
+
+  // Derive the dynamic step list once deploy options are loaded.
+  // Must be declared after deployOptions to avoid a TDZ ReferenceError.
+  const hasDatasourceStep = useMemo(
+    () => deployOptions?.accepts_datasource === true,
+    [deployOptions],
+  );
+
+  const steps = useMemo(
+    () => (hasDatasourceStep ? [...BASE_STEPS, DATASOURCE_STEP] : BASE_STEPS),
+    [hasDatasourceStep],
+  );
+
+  const LAST_STEP = steps.length - 1;
 
   // Get component models loading and error state from store
   const componentModelsLoading = useServiceDeployStore(
@@ -107,12 +165,15 @@ export const ServicesDeployFlow = ({
   );
 
   // Check if any Step 1 components are still loading or have errored
+  // Step 1 components are only the known selector types (embedding, vector store).
+  // All other types — including custom ones — belong in Step 2.
   const step1Components = useMemo(() => {
     if (!deployOptions) return [];
     return (
       deployOptions.components?.filter(
         (c) =>
-          c.type !== COMPONENT_TYPES.LLM && c.type !== COMPONENT_TYPES.RERANKER,
+          c.type === COMPONENT_TYPES.EMBEDDING ||
+          c.type === COMPONENT_TYPES.VECTOR_STORE,
       ) || []
     );
   }, [deployOptions]);
@@ -120,18 +181,23 @@ export const ServicesDeployFlow = ({
   const isStep1ComponentsLoading = useMemo(() => {
     if (!state.selectedServiceId || !step1Components.length) return false;
     return step1Components.some((component) => {
-      const key = `${state.selectedServiceId}:${component.type}`;
+      const key = `${state.selectedServiceId}:${component.type}:${runtime}`;
       return componentModelsLoading[key] === true;
     });
-  }, [state.selectedServiceId, step1Components, componentModelsLoading]);
+  }, [
+    state.selectedServiceId,
+    step1Components,
+    componentModelsLoading,
+    runtime,
+  ]);
 
   const hasStep1ComponentsError = useMemo(() => {
     if (!state.selectedServiceId || !step1Components.length) return false;
     return step1Components.some((component) => {
-      const key = `${state.selectedServiceId}:${component.type}`;
+      const key = `${state.selectedServiceId}:${component.type}:${runtime}`;
       return !!componentModelsError[key];
     });
-  }, [state.selectedServiceId, step1Components, componentModelsError]);
+  }, [state.selectedServiceId, step1Components, componentModelsError, runtime]);
 
   useEffect(() => {
     if (open && preSelectedServiceId) {
@@ -146,7 +212,9 @@ export const ServicesDeployFlow = ({
     }
   }, [open, preSelectedServiceId]);
 
-  // Initialize form data dynamically when deploy options are loaded (only once per service)
+  // Initialize form data dynamically when deploy options are loaded (only once per service).
+  // When a service declares a schema URL, wait for the schema to arrive before initializing
+  // so field defaults can be seeded correctly.
   useEffect(() => {
     if (
       open &&
@@ -155,12 +223,18 @@ export const ServicesDeployFlow = ({
       state.selectedServiceId &&
       hasInitializedFormData.current !== state.selectedServiceId
     ) {
+      // Guard: if schema URL is declared but schema hasn't arrived yet, wait.
+      // If the schema fetch errored, unblock so the error can be surfaced.
+      if (deployOptions.schema && !serviceSchema && !serviceSchemaError) return;
+
       hasInitializedFormData.current = state.selectedServiceId;
 
       // Initialize form data dynamically from API response
       const formData = initializeFormData(
         deployOptions,
         state.selectedServiceId,
+        undefined,
+        serviceSchema,
       );
 
       dispatch({
@@ -168,13 +242,22 @@ export const ServicesDeployFlow = ({
         payload: formData,
       });
     }
-  }, [open, state.currentStep, deployOptions, state.selectedServiceId]);
+  }, [
+    open,
+    state.currentStep,
+    deployOptions,
+    state.selectedServiceId,
+    serviceSchema,
+    serviceSchemaError,
+  ]);
 
   const providerSchemas = useServiceDeployStore(
     (state) => state.providerSchemas,
   );
 
-  // Helper function to check if all required credential fields are filled for all services
+  // Helper function to check if all required fields are filled for the selected service.
+  // Covers LLM provider credential fields, custom component provider fields, and
+  // service-level schema required fields.
   const areAllRequiredFieldsFilled = useMemo(() => {
     if (
       !state.selectedServiceId ||
@@ -184,35 +267,91 @@ export const ServicesDeployFlow = ({
     }
 
     const serviceConfig = state.formData.services[state.selectedServiceId];
+
+    // --- 1. LLM provider required credential fields (unchanged) ---
     const llmComponent = serviceConfig?.components?.llm;
+    if (llmComponent?.providerId) {
+      const schemaKey = `${state.selectedServiceId}:llm:${llmComponent.providerId}:${runtime}`;
+      const providerSchema = providerSchemas[schemaKey];
 
-    if (!llmComponent?.providerId) {
-      return true; // If no LLM provider selected, allow proceeding
+      if (providerSchema?.required) {
+        // Credentials land in serviceConfig.params; model lands in llmComponent.params.
+        const allParams = {
+          ...(llmComponent.params || {}),
+          ...(serviceConfig.params || {}),
+        };
+        const allFilled = providerSchema.required.every((fieldKey) => {
+          const value = allParams[fieldKey];
+          return (
+            value !== undefined && value !== null && String(value).trim() !== ""
+          );
+        });
+        if (!allFilled) return false;
+      }
     }
 
-    // Get the provider schema for the selected LLM provider
-    const schemaKey = `${state.selectedServiceId}:llm:${llmComponent.providerId}`;
-    const providerSchema = providerSchemas[schemaKey];
+    // --- 2. Custom component provider required fields ---
+    // For each non-Step-1, non-LLM, non-reranker component, validate the required
+    // (non-model) fields of the selected provider schema.  Credentials for custom
+    // components are stored in componentConfig.params (not serviceConfig.params).
+    if (deployOptions) {
+      const isStep1Type = (type: string) =>
+        type === COMPONENT_TYPES.EMBEDDING ||
+        type === COMPONENT_TYPES.VECTOR_STORE;
+      const isKnownInferenceType = (type: string) =>
+        type === COMPONENT_TYPES.LLM || type === COMPONENT_TYPES.RERANKER;
 
-    if (!providerSchema || !providerSchema.required) {
-      return true; // If no schema or no required fields, allow proceeding
+      for (const component of deployOptions.components) {
+        if (isStep1Type(component.type) || isKnownInferenceType(component.type))
+          continue;
+
+        const componentConfig = serviceConfig?.components?.[component.type];
+        if (!componentConfig?.providerId) continue;
+
+        const schemaKey = `${state.selectedServiceId}:${component.type}:${componentConfig.providerId}:${runtime}`;
+        const providerSchema = providerSchemas[schemaKey];
+
+        if (!providerSchema?.required) continue;
+
+        const schemaHasModel = !!providerSchema.properties?.model;
+        const allFilled = providerSchema.required
+          .filter((fieldKey) => schemaHasModel || fieldKey !== "model")
+          .every((fieldKey) => {
+            const value = componentConfig.params?.[fieldKey];
+            return (
+              value !== undefined &&
+              value !== null &&
+              String(value).trim() !== ""
+            );
+          });
+        if (!allFilled) return false;
+      }
     }
 
-    const requiredFields = providerSchema.required;
-    // Credentials land in serviceConfig.params; model lands in llmComponent.params.
-    // Check both so required fields are found regardless of which bag they're in.
-    const allParams = {
-      ...(llmComponent.params || {}),
-      ...(serviceConfig.params || {}),
-    };
+    // --- 3. Service-level schema required fields ---
+    if (serviceSchema) {
+      const requiredFields = getRequiredFieldKeys(serviceSchema);
+      if (requiredFields.length > 0) {
+        const params = serviceConfig.params || {};
+        const allFilled = requiredFields.every((fieldKey) => {
+          const value = params[fieldKey];
+          return (
+            value !== undefined && value !== null && String(value).trim() !== ""
+          );
+        });
+        if (!allFilled) return false;
+      }
+    }
 
-    return requiredFields.every((fieldKey) => {
-      const value = allParams[fieldKey];
-      return (
-        value !== undefined && value !== null && String(value).trim() !== ""
-      );
-    });
-  }, [state.selectedServiceId, state.formData.services, providerSchemas]);
+    return true;
+  }, [
+    state.selectedServiceId,
+    state.formData.services,
+    providerSchemas,
+    serviceSchema,
+    deployOptions,
+    runtime,
+  ]);
 
   const {
     handleNext,
@@ -236,14 +375,35 @@ export const ServicesDeployFlow = ({
       return;
     }
 
+    // If toggle is on but no data sources selected, show inline error and bail.
+    const uploadEnabled = state.formData.uploadFromSourceEnabled ?? false;
+    const hasDataSources = (state.formData.dataSources ?? []).length > 0;
+    if (hasDatasourceStep && uploadEnabled && !hasDataSources) {
+      dispatch({
+        type: ACTION_TYPES.SET_SHOW_DATASOURCE_SELECTION_ERROR,
+        payload: true,
+      });
+      return;
+    }
+
     await runDeployment({
       dispatch,
       deploy: async () => {
+        const runtimeSuffix = `:${runtime}`;
+        const resolvedSchemas = Object.fromEntries(
+          Object.entries(providerSchemas)
+            .filter(([key]) => key.endsWith(runtimeSuffix))
+            .map(([key, schema]) => [
+              key.slice(0, key.length - runtimeSuffix.length),
+              schema,
+            ]),
+        );
         const deploymentPayload = await transformToDeploymentPayload(
           state.formData,
           deployOptions,
-          providerSchemas,
+          resolvedSchemas,
           state.selectedServiceId,
+          serviceSchema,
         );
         await deployApplication(deploymentPayload);
       },
@@ -267,35 +427,64 @@ export const ServicesDeployFlow = ({
   const onLoadingStep = state.currentStep > 0;
   const shellIsLoading =
     onLoadingStep &&
-    ((!deployOptions && isLoading) || isStep1ComponentsLoading);
-  const shellError = onLoadingStep ? error : null;
+    ((!deployOptions && isLoading) ||
+      isStep1ComponentsLoading ||
+      (deployOptions?.schema != null &&
+        !serviceSchema &&
+        !serviceSchemaError &&
+        isLoading));
+  const shellError = onLoadingStep ? (error ?? serviceSchemaError) : null;
   const hasLlmError = onLoadingStep ? !!llmError : false;
 
   const isPrimaryDisabled =
     (state.currentStep === 0 && !state.selectedServiceId) ||
     !!shellError ||
     (state.currentStep === STEP_ONE && hasStep1ComponentsError) ||
-    (isLastStep && state.isEditing) ||
-    (isLastStep && !areAllRequiredFieldsFilled) ||
-    (isLastStep && (hasStep2SchemaError || hasLlmError));
+    (isLastStep && !hasDatasourceStep && state.isEditing) ||
+    (isLastStep && !hasDatasourceStep && !areAllRequiredFieldsFilled) ||
+    (isLastStep &&
+      !hasDatasourceStep &&
+      (hasStep2SchemaError || hasLlmError)) ||
+    (isLastStep && hasDatasourceStep && state.hasDatasourceStepError);
 
-  const steps = [
-    { ...STEPS[0], complete: !!state.selectedServiceId },
-    ...STEPS.slice(1),
+  const stepsWithCompletion = [
+    { ...steps[0], complete: !!state.selectedServiceId },
+    ...steps.slice(1),
   ];
+
+  // The configure step is always the step just before the optional datasource step.
+  const CONFIGURE_STEP = hasDatasourceStep ? LAST_STEP - 1 : LAST_STEP;
+
+  const handleWorkerErrorReset = useCallback(
+    () =>
+      dispatch({
+        type: ACTION_TYPES.SET_SHOW_STEP_ONE_WORKER_ERROR,
+        payload: false,
+      }),
+    [dispatch],
+  );
+
+  const handleDatasourceStepError = useCallback(
+    (hasError: boolean) =>
+      dispatch({
+        type: ACTION_TYPES.SET_DATASOURCE_STEP_ERROR,
+        payload: hasError,
+      }),
+    [dispatch],
+  );
 
   return (
     <DeployTearsheetShell
       open={open}
       onClose={handleClose}
       title="Deploy service"
-      steps={steps}
+      steps={stepsWithCompletion}
       currentStep={state.currentStep}
       isLastStep={isLastStep}
       isDeploying={state.isDeploying}
       isPrimaryDisabled={isPrimaryDisabled}
       onBack={handleBack}
-      onNext={() => handleNext(state.formData.name)}
+      onNext={() => handleNext(state.formData.name, state.formData.workerName)}
       onSubmit={handleSubmit}
       deployError={state.deployError}
       deployToastOpen={state.deployToastOpen}
@@ -320,9 +509,15 @@ export const ServicesDeployFlow = ({
           deployOptions={deployOptions}
           selectedServiceId={state.selectedServiceId}
           showNameError={state.showStepOneNameError}
+          showWorkerError={state.showStepOneWorkerError}
+          onWorkerErrorReset={handleWorkerErrorReset}
+          runtime={runtime}
+          workers={workers}
+          isLoadingWorkers={isLoadingWorkers}
+          refetchWorkers={refetchWorkers}
         />
       )}
-      {state.currentStep === LAST_STEP && deployOptions && (
+      {state.currentStep === CONFIGURE_STEP && deployOptions && (
         <StepTwo
           title="Configure services"
           formData={state.formData}
@@ -335,6 +530,30 @@ export const ServicesDeployFlow = ({
           serviceDescription={selectedService?.description}
           isLoadingLlmModels={!!isLoading}
           onComponentError={setHasStep2SchemaError}
+          runtime={runtime}
+          serviceSchema={serviceSchema}
+        />
+      )}
+      {isLastStep && hasDatasourceStep && (
+        <SharedDatasourceStep
+          title="Select data sources"
+          formData={state.formData}
+          onChange={(updates) => {
+            // Clear the selection error as soon as the user interacts
+            // (toggles off, or picks a source).
+            if (
+              updates.uploadFromSourceEnabled === false ||
+              (updates.dataSources && updates.dataSources.length > 0)
+            ) {
+              dispatch({
+                type: ACTION_TYPES.SET_SHOW_DATASOURCE_SELECTION_ERROR,
+                payload: false,
+              });
+            }
+            handleFormDataChange(updates);
+          }}
+          onComponentError={handleDatasourceStepError}
+          showSelectionError={state.showDatasourceSelectionError}
         />
       )}
     </DeployTearsheetShell>

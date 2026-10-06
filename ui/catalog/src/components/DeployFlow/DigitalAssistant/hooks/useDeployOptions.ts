@@ -5,8 +5,10 @@ import {
   fetchDeployOptions,
   fetchProviderSchema,
   fetchServiceParams,
+  fetchServiceSchemaParams,
 } from "@/api/applications.api";
 import { dedupe } from "@/utils/requestManager";
+import { WORKER_RUNTIME_LABELS } from "@/constants";
 
 /** Extracts LLMOption entries for a single provider from its resolved schema. */
 function extractModelsFromSchema(
@@ -39,8 +41,10 @@ function extractModelsFromSchema(
   return [];
 }
 
-// Fetches deploy options and all component provider schemas eagerly on mount. Failed schemas are skipped, reopening the tearsheet re-triggers them; StepOne warns if any are still missing.
-export const useDeployOptions = (open: boolean) => {
+// Fetches deploy options and all component provider schemas eagerly on mount for both runtimes.
+// Failed schemas are skipped; reopening the tearsheet re-triggers them.
+// StepOne warns if any are still missing.
+export const useDeployOptions = (open: boolean, runtime: string) => {
   const {
     selectedArchitectureId,
     getDeployOptions,
@@ -67,9 +71,9 @@ export const useDeployOptions = (open: boolean) => {
   const inFlightKeys = useRef<Set<string>>(new Set());
   const [inflightCount, setInflightCount] = useState(0);
 
-  // Get deploy options for the selected architecture
+  // Deploy options for the active runtime
   const deployOptions = selectedArchitectureId
-    ? getDeployOptions(selectedArchitectureId)
+    ? getDeployOptions(selectedArchitectureId, runtime)
     : null;
 
   const shouldBeLoading =
@@ -78,47 +82,52 @@ export const useDeployOptions = (open: boolean) => {
     !deployOptionsError &&
     !deployOptionsLoading;
 
-  // Step 1 — fetch deploy options; re-runs when the tearsheet reopens after an error.
+  // Step 1 — fetch deploy options for BOTH runtimes eagerly so switching tiles is instant.
   useEffect(() => {
     if (!open || !selectedArchitectureId) return;
 
-    const isStale = isDeployOptionsStale(selectedArchitectureId);
+    Object.keys(WORKER_RUNTIME_LABELS).forEach((rt) => {
+      const isStale = isDeployOptionsStale(selectedArchitectureId, rt);
+      const cached = getDeployOptions(selectedArchitectureId, rt);
 
-    if ((!deployOptions || isStale) && !deployOptionsLoading) {
-      setDeployOptionsLoading(true);
-      setDeployOptionsError(null);
+      if ((!cached || isStale) && !deployOptionsLoading) {
+        setDeployOptionsLoading(true);
+        setDeployOptionsError(null);
 
-      const requestKey = `deployOptions:${selectedArchitectureId}`;
-      dedupe(requestKey, () => fetchDeployOptions(selectedArchitectureId))
-        .then((data) => {
-          useDeployStore
-            .getState()
-            .setDeployOptions(selectedArchitectureId, data);
-        })
-        .catch((err) => {
-          setDeployOptionsError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load deploy options",
-          );
-        });
-    }
+        const requestKey = `deployOptions:${selectedArchitectureId}:${rt}`;
+        dedupe(requestKey, () => fetchDeployOptions(selectedArchitectureId, rt))
+          .then((data) => {
+            useDeployStore
+              .getState()
+              .setDeployOptions(selectedArchitectureId, rt, data);
+          })
+          .catch((err) => {
+            // Only surface the error for the active runtime
+            if (rt === runtime) {
+              setDeployOptionsError(
+                err instanceof Error
+                  ? err.message
+                  : "Failed to load deploy options",
+              );
+            }
+          });
+      }
+    });
   }, [
     open,
     selectedArchitectureId,
-    deployOptions,
+    runtime,
     deployOptionsLoading,
     isDeployOptionsStale,
+    getDeployOptions,
     setDeployOptions,
     setDeployOptionsLoading,
     setDeployOptionsError,
   ]);
 
-  // Step 2 — eagerly fetch all provider schemas once deploy options land.
-  // In-flight tracking (and therefore isProviderParamsLoading) is scoped to
-  // global-component providers only — those are the schemas StepOne reads.
-  // Service-component and service-level schemas are fetched in the background
-  // without blocking the StepOne Next button.
+  // Step 2 — eagerly fetch all provider schemas once deploy options land for the active runtime.
+  // In-flight tracking is scoped to global-component providers only — those are the schemas
+  // StepOne reads. Service-component and service-level schemas are fetched in the background.
   useEffect(() => {
     if (!open || !deployOptions) return;
 
@@ -157,14 +166,14 @@ export const useDeployOptions = (open: boolean) => {
 
     const globalPairsToFetch = globalPairs.filter(
       ({ componentType, providerId }) => {
-        const cached = getProviderParams(componentType, providerId);
+        const cached = getProviderParams(componentType, providerId, runtime);
         const hasError =
           !!useDeployStore.getState().providerParamsError[
-            `${componentType}:${providerId}`
+            `${runtime}:${componentType}:${providerId}`
           ];
         return (
           !cached ||
-          isProviderParamsStale(componentType, providerId) ||
+          isProviderParamsStale(componentType, providerId, runtime) ||
           hasError
         );
       },
@@ -172,27 +181,34 @@ export const useDeployOptions = (open: boolean) => {
 
     const backgroundPairsToFetch = backgroundPairs.filter(
       ({ componentType, providerId }) => {
-        const cached = getProviderParams(componentType, providerId);
+        const cached = getProviderParams(componentType, providerId, runtime);
         const hasError =
           !!useDeployStore.getState().providerParamsError[
-            `${componentType}:${providerId}`
+            `${runtime}:${componentType}:${providerId}`
           ];
         return (
           !cached ||
-          isProviderParamsStale(componentType, providerId) ||
+          isProviderParamsStale(componentType, providerId, runtime) ||
           hasError
         );
       },
     );
 
-    // Collect service IDs that need their service-level schema fetched
-    const serviceIds = deployOptions.services.map((s) => s.id);
-    const serviceIdsToFetch = serviceIds.filter((serviceId) => {
-      const cached = getServiceParams(serviceId);
+    // Collect services that need their service-level schema fetched.
+    // Services with no components and no schema declaration are zero-config — skip them.
+    const servicesToFetch = deployOptions.services.filter((service) => {
+      const hasComponents = service.components.length > 0;
+      const hasSchema = !!service.schema;
+      if (!hasComponents && !hasSchema) return false;
+      const cached = getServiceParams(service.id, runtime);
       const hasError =
-        !!useDeployStore.getState().serviceParamsError[serviceId];
-      return !cached || isServiceParamsStale(serviceId) || hasError;
+        !!useDeployStore.getState().serviceParamsError[
+          `${runtime}:${service.id}`
+        ];
+      return !cached || isServiceParamsStale(service.id, runtime) || hasError;
     });
+    // Keep name consistent with the early-exit length check below
+    const serviceIdsToFetch = servicesToFetch.map((s) => s.id);
 
     // No fetches needed — build model lists from cache; no .finally callbacks will fire.
     if (globalPairsToFetch.length === 0) {
@@ -200,7 +216,11 @@ export const useDeployOptions = (open: boolean) => {
       deployOptions.global_components.forEach((component) => {
         modelsByType[component.type] = [];
         component.providers.forEach((provider) => {
-          const cached = getProviderParams(component.type, provider.id);
+          const cached = getProviderParams(
+            component.type,
+            provider.id,
+            runtime,
+          );
           if (!cached) return;
           modelsByType[component.type].push(
             ...extractModelsFromSchema(cached, provider.id, provider.name),
@@ -208,7 +228,7 @@ export const useDeployOptions = (open: boolean) => {
         });
       });
       Object.entries(modelsByType).forEach(([ct, models]) => {
-        setGlobalComponentModels(ct, models);
+        setGlobalComponentModels(ct, runtime, models);
       });
     }
 
@@ -224,7 +244,8 @@ export const useDeployOptions = (open: boolean) => {
       setInflightCount(inFlightKeys.current.size);
     };
 
-    // Only global-component pairs enter the in-flight set so isProviderParamsLoading reflects only what StepOne needs, not the full schema set.
+    // Only global-component pairs enter the in-flight set so isProviderParamsLoading
+    // reflects only what StepOne needs, not the full schema set.
     globalPairsToFetch.forEach(({ componentType, providerId }) => {
       inFlightKeys.current.add(`${componentType}:${providerId}`);
     });
@@ -245,12 +266,12 @@ export const useDeployOptions = (open: boolean) => {
           .find((c) => c.type === componentType)
           ?.providers.find((p) => p.id === providerId);
         // Clear any stale error before retrying so the banner doesn't flash while in-flight
-        clearProviderParamsError(componentType, providerId);
-        return dedupe(`providerParams:${key}`, () =>
-          fetchProviderSchema(componentType, providerId),
+        clearProviderParamsError(componentType, providerId, runtime);
+        return dedupe(`providerParams:${runtime}:${key}`, () =>
+          fetchProviderSchema(componentType, providerId, runtime),
         )
           .then((schema) => {
-            setProviderParams(componentType, providerId, schema);
+            setProviderParams(componentType, providerId, runtime, schema);
             globalSchemaResults.push({
               componentType,
               providerId,
@@ -262,6 +283,7 @@ export const useDeployOptions = (open: boolean) => {
             setProviderParamsError(
               componentType,
               providerId,
+              runtime,
               err instanceof Error ? err.message : "Failed to load schema",
             );
             globalSchemaResults.push({
@@ -291,48 +313,81 @@ export const useDeployOptions = (open: boolean) => {
                 },
               );
               Object.entries(modelsByType).forEach(([ct, models]) => {
-                setGlobalComponentModels(ct, models);
+                setGlobalComponentModels(ct, runtime, models);
               });
             }
           });
       }),
       ...backgroundPairsToFetch.map(({ componentType, providerId }) => {
         const key = `${componentType}:${providerId}`;
-        clearProviderParamsError(componentType, providerId);
-        return dedupe(`providerParams:${key}`, () =>
-          fetchProviderSchema(componentType, providerId),
+        clearProviderParamsError(componentType, providerId, runtime);
+        return dedupe(`providerParams:${runtime}:${key}`, () =>
+          fetchProviderSchema(componentType, providerId, runtime),
         )
           .then((schema) => {
-            setProviderParams(componentType, providerId, schema);
+            setProviderParams(componentType, providerId, runtime, schema);
           })
           .catch((err) => {
             setProviderParamsError(
               componentType,
               providerId,
+              runtime,
               err instanceof Error ? err.message : "Failed to load schema",
             );
           });
       }),
-      ...serviceIdsToFetch.map((serviceId) => {
-        clearServiceParamsError(serviceId);
-        return dedupe(`serviceParams:${serviceId}`, () =>
-          fetchServiceParams(serviceId),
-        )
-          .then((data) => {
-            setServiceParams(serviceId, data);
-          })
-          .catch((err) => {
-            setServiceParamsError(
-              serviceId,
-              err instanceof Error
-                ? err.message
-                : "Failed to load service schema",
-            );
-          });
+      ...servicesToFetch.flatMap((service) => {
+        clearServiceParamsError(service.id, runtime);
+        const fetches: Promise<void>[] = [];
+
+        // Use the direct schema URL when declared (may coexist with components — Scenario C).
+        if (service.schema) {
+          fetches.push(
+            dedupe(`serviceParams:${runtime}:${service.id}:schema`, () =>
+              fetchServiceSchemaParams(service.schema!),
+            )
+              .then((data) => {
+                setServiceParams(service.id, runtime, data);
+              })
+              .catch((err) => {
+                setServiceParamsError(
+                  service.id,
+                  runtime,
+                  err instanceof Error
+                    ? err.message
+                    : "Failed to load service schema",
+                );
+              }),
+          );
+        }
+
+        // For services with components but no schema URL, fall back to legacy endpoint.
+        if (!service.schema) {
+          fetches.push(
+            dedupe(`serviceParams:${runtime}:${service.id}`, () =>
+              fetchServiceParams(service.id, runtime),
+            )
+              .then((data) => {
+                setServiceParams(service.id, runtime, data);
+              })
+              .catch((err) => {
+                setServiceParamsError(
+                  service.id,
+                  runtime,
+                  err instanceof Error
+                    ? err.message
+                    : "Failed to load service schema",
+                );
+              }),
+          );
+        }
+
+        return fetches;
       }),
     ]);
   }, [
     open,
+    runtime,
     deployOptions,
     getProviderParams,
     setProviderParams,

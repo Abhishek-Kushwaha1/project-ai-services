@@ -1,5 +1,5 @@
 import { useReducer, useCallback, useRef, useEffect } from "react";
-import { isAxiosError } from "axios";
+import ConnectorDetailsPanel from "@/components/ConnectorDetailsPanel";
 import {
   DataTable,
   Table,
@@ -151,7 +151,7 @@ const DataSourceConnectorsTable = ({
     [],
   );
 
-  // Background prefetch — fires once after the connector list loads successfully.
+  // Background prefetch — fires once after the first fetch completes (even if empty).
   useEffect(() => {
     // Skip if cache is still fresh
     if (!isConnectorTypesStale()) return;
@@ -196,9 +196,7 @@ const DataSourceConnectorsTable = ({
       await loadConnectors();
     } catch (err) {
       const msg =
-        isAxiosError(err) && err.response?.data?.error
-          ? err.response.data.error
-          : "Failed to remove data source";
+        err instanceof Error ? err.message : "Failed to remove data source";
       dispatch({ type: ACTION_TYPES.SET_MODAL_DELETE_ERROR, payload: msg });
     } finally {
       dispatch({ type: "SHARED_SET_DELETING", payload: false });
@@ -253,6 +251,14 @@ const DataSourceConnectorsTable = ({
 
   return (
     <>
+      {/* Connector details panel */}
+      <ConnectorDetailsPanel
+        open={state.isDetailsPanelOpen}
+        connectorId={state.selectedConnectorId}
+        mode={state.detailsPanelMode}
+        onClose={() => dispatch({ type: ACTION_TYPES.CLOSE_DETAILS_PANEL })}
+      />
+
       {/* Toasts — rendered outside the grid to stay fixed-position */}
       <TableToasts
         toastOpen={state.toastOpen}

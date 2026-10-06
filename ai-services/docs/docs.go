@@ -915,7 +915,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the complete list of container images required to deploy an architecture and all its services and component dependencies.\nThe response always includes catalog asset images (the tool image used for housekeeping tasks\nand the catalog infrastructure images for the catalog service itself).\nBoth embedded (built-in) and custom bundle architectures are supported.",
+                "description": "Returns the complete list of container images required to deploy an architecture and all its services and component dependencies.\nThe response always includes catalog asset images (the tool image used for housekeeping tasks\nand the catalog infrastructure images for the catalog service itself).\nBoth embedded (built-in) and custom bundle architectures are supported.\nNot supported on OpenShift deployments.",
                 "produces": [
                     "application/json"
                 ],
@@ -950,6 +950,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Architecture not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Not supported on OpenShift deployments",
                         "schema": {
                             "$ref": "#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse"
                         }
@@ -2174,7 +2180,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves system resource information including CPU, memory, and accelerator availability.\nWhen the optional ` + "`" + `worker` + "`" + ` query parameter is provided, the resources are fetched from\nthat remote worker node instead of the local runtime.",
+                "description": "Retrieves system resource information including CPU, memory, and accelerator availability.\nDefaults to the local worker when the ` + "`" + `worker` + "`" + ` query parameter is omitted.",
                 "produces": [
                     "application/json"
                 ],
@@ -2185,7 +2191,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Worker name to query resources from",
+                        "description": "Worker name to query resources from (default: Local)",
                         "name": "worker",
                         "in": "query"
                     }
@@ -2381,7 +2387,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the complete list of container images required to deploy a service and all its component dependencies.\nThe response always includes catalog asset images (the tool image used for housekeeping tasks\nand the catalog infrastructure images for the catalog service itself).\nBoth embedded (built-in) and custom bundle services are supported.",
+                "description": "Returns the complete list of container images required to deploy a service and all its component dependencies.\nThe response always includes catalog asset images (the tool image used for housekeeping tasks\nand the catalog infrastructure images for the catalog service itself).\nBoth embedded (built-in) and custom bundle services are supported.\nNot supported on OpenShift deployments.",
                 "produces": [
                     "application/json"
                 ],
@@ -2416,6 +2422,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Service not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Not supported on OpenShift deployments",
                         "schema": {
                             "$ref": "#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse"
                         }
@@ -2692,6 +2704,13 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "409": {
+                        "description": "Worker is already registered and ready",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "500": {
                         "description": "Internal error",
                         "schema": {
@@ -2799,6 +2818,13 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Worker not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Worker still has applications deployed on it",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -3528,11 +3554,20 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "namespace": {
+                    "type": "string"
+                },
+                "runtime_type": {
+                    "type": "string"
+                },
                 "services": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.Pod"
                     }
+                },
+                "worker_name": {
+                    "type": "string"
                 }
             }
         },
@@ -4205,9 +4240,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "worker_name": {
-                    "type": "string",
-                    "maxLength": 100,
-                    "minLength": 1
+                    "type": "string"
                 }
             }
         },

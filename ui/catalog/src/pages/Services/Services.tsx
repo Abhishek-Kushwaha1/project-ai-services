@@ -42,8 +42,7 @@ const transformServiceData = (service: Service): ServiceDetailData => {
 };
 
 const Services = () => {
-  // Use unified services cache - autoFetch on mount
-  const { services, isLoading, error, refetch } = useServices(true);
+  const { services, isLoading, error, refetch } = useServices();
 
   // Local UI state using useReducer
   const [state, dispatch] = useReducer(servicesReducer, initialState);
@@ -60,9 +59,8 @@ const Services = () => {
 
   const handleTabChange = (evt: { selectedIndex: number }) => {
     dispatch({ type: "SET_SELECTED_TAB", payload: evt.selectedIndex });
-    // Catalog tab is at index 1
-    // Services are static data, only fetch if not already cached
-    if (evt.selectedIndex === 1 && services.length === 0) {
+    // Catalog tab is index 1 — fetch fresh data every time the user switches to it
+    if (evt.selectedIndex === 1) {
       refetch();
     }
   };
@@ -102,6 +100,16 @@ const Services = () => {
     dispatch({ type: "SHOW_DEPLOYMENT_DETAILS", payload: deployment });
   };
 
+  // Navigate to DeploymentDetails with integration section pre-selected.
+  // DeployedServicesTable resolves the real row data before calling this callback.
+  const handleViewIntegration = (deployment: DeploymentDetailsType) => {
+    dispatch({
+      type: "SHOW_DEPLOYMENT_DETAILS",
+      payload: deployment,
+      defaultSection: "integration",
+    });
+  };
+
   const handleBackFromDetails = () => {
     dispatch({ type: "HIDE_DEPLOYMENT_DETAILS" });
   };
@@ -130,6 +138,7 @@ const Services = () => {
           handleBackFromDetails();
         }}
         deploymentSource="Services"
+        defaultSection={state.deploymentDefaultSection}
         onNameUpdate={(newName) =>
           dispatch({
             type: "UPDATE_DEPLOYMENT_NAME",
@@ -162,6 +171,7 @@ const Services = () => {
               onDeploy={handleDeployFromTable}
               refreshTrigger={state.tableRefreshTrigger}
               onRowClick={handleShowDeploymentDetails}
+              onViewIntegration={handleViewIntegration}
             />
           </TabPanel>
           <TabPanel>

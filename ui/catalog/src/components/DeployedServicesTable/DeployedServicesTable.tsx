@@ -62,6 +62,7 @@ interface RenderCellProps {
   cellProps: Record<string, unknown>;
   rowData: DeployedServicesRow;
   onRowClick?: (deployment: DeploymentDetails) => void;
+  onViewIntegration?: (deployment: DeploymentDetails) => void;
 }
 
 const renderCell = ({
@@ -73,6 +74,7 @@ const renderCell = ({
   cellProps,
   rowData,
   onRowClick,
+  onViewIntegration,
 }: RenderCellProps) => {
   const CellRenderer = CELL_RENDERERS[header as keyof typeof CELL_RENDERERS];
   const cellDispatch = dispatch as Parameters<
@@ -88,6 +90,17 @@ const renderCell = ({
           dispatch={cellDispatch}
           rowData={rowData}
           onRowClick={header === "name" ? onRowClick : undefined}
+          onViewIntegration={
+            header === "actions" && onViewIntegration
+              ? () =>
+                  onViewIntegration({
+                    id: rowData.id,
+                    name: rowData.name,
+                    status: rowData.status,
+                    type: rowData.type ?? "Service",
+                  })
+              : undefined
+          }
         />
       ) : (
         String(value || "")
@@ -100,12 +113,14 @@ interface DeployedServicesTableProps {
   onDeploy?: () => void;
   refreshTrigger?: number;
   onRowClick?: (deployment: DeploymentDetails) => void;
+  onViewIntegration?: (deployment: DeploymentDetails) => void;
 }
 
 const DeployedServicesTable = ({
   onDeploy,
   refreshTrigger,
   onRowClick,
+  onViewIntegration,
 }: DeployedServicesTableProps) => {
   const [state, dispatch] = useReducer(appReducer, INITIAL_STATE);
 
@@ -243,7 +258,15 @@ const DeployedServicesTable = ({
     csvFileName: state.csvFileName,
     totalItems: state.totalItems,
     search: state.search,
-    searchFields: ["name", "status", "uptime", "messages", "service"],
+    searchFields: [
+      "name",
+      "status",
+      "uptime",
+      "workerResource",
+      "workerType",
+      "messages",
+      "service",
+    ],
     visibleColumns: state.visibleColumns,
     headers: HEADERS,
     fetchAllRows: async () => {
@@ -260,7 +283,15 @@ const DeployedServicesTable = ({
   const filteredRows = filterRowsBySearch<Record<string, unknown>>(
     state.rowsData as unknown as Record<string, unknown>[],
     state.search,
-    ["name", "status", "uptime", "messages", "service"],
+    [
+      "name",
+      "status",
+      "uptime",
+      "workerResource",
+      "workerType",
+      "messages",
+      "service",
+    ],
   ) as unknown as DeployedServicesRow[];
 
   const noApplications =
@@ -453,6 +484,7 @@ const DeployedServicesTable = ({
                                           cellProps,
                                           rowData,
                                           onRowClick,
+                                          onViewIntegration,
                                         });
                                       })}
                                     </TableRow>

@@ -1,4 +1,11 @@
-import { useReducer, useEffect, useRef, useMemo, useState } from "react";
+import {
+  useReducer,
+  useEffect,
+  useRef,
+  useMemo,
+  useState,
+  useCallback,
+} from "react";
 import type { DeployFlowAction } from "./types";
 import type {
   BaseDeployFlowProps,
@@ -11,19 +18,25 @@ import {
   sharedDeployFlowReducer,
   useDeployFlowReducer,
 } from "../Shared/hooks/useDeployFlowReducer";
+import { getRequiredFieldKeys } from "../Shared/utils/paramFilter";
 import { deployApplication, fetchServices } from "@/api/applications.api";
 import { transformToDeploymentPayload } from "./utils/digitalAssistantDeploymentTransform";
 import { runDeployment } from "../Shared/utils/runDeployment";
 import { DeployTearsheetShell } from "../Shared/components/DeployTearsheetShell";
 import { StepOne } from "./steps/DAStepOne";
 import { DAStepTwo as StepTwo } from "./steps/DAStepTwo";
+import { SharedDatasourceStep as StepThree } from "../Shared/steps/SharedDatasourceStep";
 import { useDeployOptions } from "./hooks/useDeployOptions";
 import { useDeployStore } from "@/store/deploy.store";
 import { initializeFormData } from "./utils/formDataInitializer";
-import { BASE_INITIAL_STATE } from "../Shared/utils/formData";
+import {
+  BASE_INITIAL_STATE,
+  DEFAULT_FORM_DATA,
+} from "../Shared/utils/formData";
 import { dedupe } from "@/utils/requestManager";
+import { useWorkers } from "@/hooks/useWorkers";
 
-const STEPS = [
+const BASE_STEPS = [
   {
     label: "Provide assistant details",
     description: "Configure basic settings",
@@ -33,8 +46,14 @@ const STEPS = [
     description: "Select and configure services",
   },
 ];
+
+const DATASOURCE_STEP = {
+  label: "Select data sources",
+  description: "Connect data sources to your assistant",
+};
+
 const STEP_ONE = 0;
-const LAST_STEP = STEPS.length - 1;
+const STEP_TWO = 1;
 
 const getInitialState = (formData: DeployFormData): BaseDeployFlowState => ({
   ...BASE_INITIAL_STATE,
@@ -52,6 +71,9 @@ const daDeployFlowReducer = (
         version: "",
         globalComponents: {},
         services: {},
+        ...DEFAULT_FORM_DATA,
+        dataSources: [],
+        uploadFromSourceEnabled: false,
       });
     default:
       return sharedDeployFlowReducer(state, action);
@@ -63,10 +85,18 @@ export const DeployFlow = ({
   onClose,
   onSubmit,
 }: BaseDeployFlowProps) => {
-  const { deployOptions, isLoading, isProviderParamsLoading, error } =
-    useDeployOptions(open);
   const [hasStep1SchemaError, setHasStep1SchemaError] = useState(false);
   const [hasStep2SchemaError, setHasStep2SchemaError] = useState(false);
+  const [hasStep3SchemaError, setHasStep3SchemaError] = useState(false);
+  // Flipped to true on the first deploy attempt when toggle is on but nothing
+  // is selected. Cleared when the user changes the toggle or closes the flow.
+  const [showStep3SelectionError, setShowStep3SelectionError] = useState(false);
+
+  const {
+    workers,
+    isLoading: isLoadingWorkers,
+    refetch: refetchWorkers,
+  } = useWorkers();
 
   const {
     serviceSummaries,
@@ -76,8 +106,43 @@ export const DeployFlow = ({
     isServiceSummariesStale,
     providerParams,
     serviceParams,
+    serviceParamsError,
     initialize,
   } = useDeployStore();
+
+  // useReducer must come before useDeployOptions so runtime can be derived from state
+  const initialState = useMemo(
+    () =>
+      getInitialState({
+        name: "Digital assistant (copy)",
+        version: "",
+        globalComponents: {},
+        services: {},
+        ...DEFAULT_FORM_DATA,
+      }),
+    [],
+  );
+  const [state, dispatch] = useReducer(daDeployFlowReducer, initialState);
+  const hasInitialized = useRef(false);
+
+  const runtime = state.formData.deploymentType;
+
+  const { deployOptions, isLoading, isProviderParamsLoading, error } =
+    useDeployOptions(open, runtime);
+
+  const hasDatasourceStep = useMemo(
+    () =>
+      deployOptions?.services.some((s) => s.accepts_datasource === true) ??
+      false,
+    [deployOptions],
+  );
+
+  const steps = useMemo(
+    () => (hasDatasourceStep ? [...BASE_STEPS, DATASOURCE_STEP] : BASE_STEPS),
+    [hasDatasourceStep],
+  );
+
+  const LAST_STEP = steps.length - 1;
 
   // Build once here and pass down — both StepOne and StepTwo need the same map.
   const providerParamsByType = useMemo(() => {
@@ -90,12 +155,13 @@ export const DeployFlow = ({
     allComponents.forEach((component) => {
       if (!result[component.type]) result[component.type] = {};
       component.providers.forEach((provider) => {
-        const cached = providerParams[`${component.type}:${provider.id}`];
+        const cached =
+          providerParams[`${runtime}:${component.type}:${provider.id}`];
         if (cached) result[component.type][provider.id] = cached.data;
       });
     });
     return result;
-  }, [deployOptions, providerParams]);
+  }, [deployOptions, providerParams, runtime]);
 
   // Initialize store and validate cache version on mount
   useEffect(() => {
@@ -132,21 +198,6 @@ export const DeployFlow = ({
     isServiceSummariesStale,
   ]);
 
-  const initialState = useMemo(() => {
-    if (deployOptions) {
-      return getInitialState(initializeFormData(deployOptions));
-    }
-    return getInitialState({
-      name: "Digital assistant (copy)",
-      version: "",
-      globalComponents: {},
-      services: {},
-    });
-  }, [deployOptions]);
-
-  const [state, dispatch] = useReducer(daDeployFlowReducer, initialState);
-  const hasInitialized = useRef(false);
-
   useEffect(() => {
     if (!open) {
       hasInitialized.current = false;
@@ -182,11 +233,26 @@ export const DeployFlow = ({
       return;
     }
 
+    // If toggle is on but no data sources selected, show inline error and bail.
+    const uploadEnabled = state.formData.uploadFromSourceEnabled ?? false;
+    const hasDataSources = (state.formData.dataSources ?? []).length > 0;
+    if (hasDatasourceStep && uploadEnabled && !hasDataSources) {
+      setShowStep3SelectionError(true);
+      return;
+    }
+
     await runDeployment({
       dispatch,
       deploy: async () => {
+        // Build service schemas for the active runtime only (keys are "runtime:serviceId")
+        const runtimePrefix = `${runtime}:`;
         const serviceSchemas = Object.fromEntries(
-          Object.entries(serviceParams).map(([id, cache]) => [id, cache.data]),
+          Object.entries(serviceParams)
+            .filter(([key]) => key.startsWith(runtimePrefix))
+            .map(([key, cache]) => [
+              key.slice(runtimePrefix.length),
+              cache.data,
+            ]),
         );
         const deploymentPayload = transformToDeploymentPayload(
           state.formData,
@@ -197,6 +263,7 @@ export const DeployFlow = ({
         await deployApplication(deploymentPayload);
       },
       onSuccess: () => {
+        setShowStep3SelectionError(false);
         onSubmit();
         dispatch({ type: ACTION_TYPES.RESET_STATE });
         onClose();
@@ -209,6 +276,8 @@ export const DeployFlow = ({
     hasInitialized.current = false;
     setHasStep1SchemaError(false);
     setHasStep2SchemaError(false);
+    setHasStep3SchemaError(false);
+    setShowStep3SelectionError(false);
     onClose();
   };
 
@@ -220,23 +289,80 @@ export const DeployFlow = ({
   // user sees a spinner rather than a populated step with a grey Next button.
   const shellIsLoading = isLoading || isProviderParamsLoading;
 
+  // Gate the Deploy button when any enabled service
+  const areAllRequiredFieldsFilled = useMemo(() => {
+    if (!deployOptions) return true;
+    const runtimePrefix = `${runtime}:`;
+    return deployOptions.services.every((service) => {
+      const serviceConfig = state.formData.services[service.id];
+      if (!serviceConfig?.enabled) return true;
+
+      const cacheKey = `${runtimePrefix}${service.id}`;
+      const schema = serviceParams[cacheKey]?.data;
+      const fetchFailed = !!serviceParamsError?.[cacheKey];
+
+      // If the service declares a schema URL, wait for it before deploying.
+      // Sending params without the schema means nestParamsBySchema cannot nest them
+      // correctly and the server receives the wrong payload shape.
+      if (service.schema && !schema) {
+        // fetch failed → block (StepTwo error banner already explains why)
+        // still in-flight → block silently until schema arrives
+        return false;
+      }
+
+      // A schema fetch that failed for a service without an explicit schema URL
+      // (legacy endpoint path) should also block.
+      if (fetchFailed) return false;
+
+      if (!schema) return true;
+      const requiredFields = getRequiredFieldKeys(schema);
+      if (requiredFields.length === 0) return true;
+      return requiredFields.every((fieldKey: string) => {
+        const value = serviceConfig.params?.[fieldKey];
+        return (
+          value !== undefined && value !== null && String(value).trim() !== ""
+        );
+      });
+    });
+  }, [
+    deployOptions,
+    state.formData.services,
+    serviceParams,
+    serviceParamsError,
+    runtime,
+  ]);
+
+  const isPrimaryDisabled =
+    shellIsLoading ||
+    !!error ||
+    (state.currentStep === STEP_ONE && hasStep1SchemaError) ||
+    (state.currentStep === STEP_TWO &&
+      (hasStep2SchemaError ||
+        state.isEditing ||
+        !areAllRequiredFieldsFilled)) ||
+    (isLastStep && hasStep3SchemaError);
+
+  const handleWorkerErrorReset = useCallback(
+    () =>
+      dispatch({
+        type: ACTION_TYPES.SET_SHOW_STEP_ONE_WORKER_ERROR,
+        payload: false,
+      }),
+    [dispatch],
+  );
+
   return (
     <DeployTearsheetShell
       open={open}
       onClose={handleClose}
       title="Deploy digital assistant"
-      steps={STEPS}
+      steps={steps}
       currentStep={state.currentStep}
       isLastStep={isLastStep}
       isDeploying={state.isDeploying}
-      isPrimaryDisabled={
-        shellIsLoading ||
-        !!error ||
-        (!isLastStep && hasStep1SchemaError) ||
-        (isLastStep && (hasStep2SchemaError || state.isEditing))
-      }
+      isPrimaryDisabled={isPrimaryDisabled}
       onBack={handleBack}
-      onNext={() => handleNext(state.formData.name)}
+      onNext={() => handleNext(state.formData.name, state.formData.workerName)}
       onSubmit={handleSubmit}
       deployError={state.deployError}
       deployToastOpen={state.deployToastOpen}
@@ -253,10 +379,16 @@ export const DeployFlow = ({
           deployOptions={deployOptions}
           providerParamsByType={providerParamsByType}
           showNameError={state.showStepOneNameError}
+          showWorkerError={state.showStepOneWorkerError}
+          onWorkerErrorReset={handleWorkerErrorReset}
           onComponentError={setHasStep1SchemaError}
+          runtime={runtime}
+          workers={workers}
+          isLoadingWorkers={isLoadingWorkers}
+          refetchWorkers={refetchWorkers}
         />
       )}
-      {state.currentStep === LAST_STEP && deployOptions && (
+      {state.currentStep === STEP_TWO && deployOptions && (
         <StepTwo
           title="Configure services"
           formData={state.formData}
@@ -266,6 +398,26 @@ export const DeployFlow = ({
           onEditingChange={handleEditingChange}
           onResourceStatusChange={handleResourceStatusChange}
           onComponentError={setHasStep2SchemaError}
+          runtime={runtime}
+        />
+      )}
+      {isLastStep && hasDatasourceStep && (
+        <StepThree
+          title="Select data sources"
+          formData={state.formData}
+          onChange={(updates) => {
+            // Clear the selection error as soon as the user interacts
+            // (toggles off, or picks a source).
+            if (
+              updates.uploadFromSourceEnabled === false ||
+              (updates.dataSources && updates.dataSources.length > 0)
+            ) {
+              setShowStep3SelectionError(false);
+            }
+            handleFormDataChange(updates);
+          }}
+          onComponentError={setHasStep3SchemaError}
+          showSelectionError={showStep3SelectionError}
         />
       )}
     </DeployTearsheetShell>

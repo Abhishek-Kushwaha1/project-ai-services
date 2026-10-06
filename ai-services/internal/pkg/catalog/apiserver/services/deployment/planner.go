@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog"
@@ -13,8 +12,9 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/apiserver/services/params"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/db/repository"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/utils"
-	"github.com/project-ai-services/ai-services/internal/pkg/cli/helpers"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
+	"github.com/project-ai-services/ai-services/internal/pkg/runtime"
+	remoteruntime "github.com/project-ai-services/ai-services/internal/pkg/runtime/remote"
 	runtimeTypes "github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 	workerconstants "github.com/project-ai-services/ai-services/internal/pkg/worker/constants"
 	"github.com/project-ai-services/ai-services/internal/pkg/worker/stream"
@@ -25,29 +25,24 @@ import (
 // 2. Deduplicating components (same type + provider + params = single deployment)
 // 3. Creating deployment plan with shared components.
 type DeploymentPlanner struct {
-	catalogProvider   *catalog.CatalogProvider
-	componentRepo     repository.ComponentRepository
-	paramBuilder      *params.ParamBuilder
-	serverRuntimeType string
-	runtimeType       string
+	catalogProvider *catalog.CatalogProvider
+	componentRepo   repository.ComponentRepository
+	paramBuilder    *params.ParamBuilder
+	runtimeType     string
 	// workerRegistry is optional; when set, PlanDeployment validates remote
 	// worker metadata (e.g. Caddy config) before any DB records are written.
 	workerRegistry stream.WorkerRegistry
 }
 
 // NewDeploymentPlanner creates a new deployment planner.
-// serverRuntimeType is the runtime the server itself is configured with (e.g.
-// "podman" or "openshift") and is used as the default when no worker overrides it.
 func NewDeploymentPlanner(
 	provider *catalog.CatalogProvider,
 	componentRepo repository.ComponentRepository,
-	serverRuntimeType string,
 ) *DeploymentPlanner {
 	return &DeploymentPlanner{
-		catalogProvider:   provider,
-		componentRepo:     componentRepo,
-		paramBuilder:      params.NewParamBuilder(provider),
-		serverRuntimeType: serverRuntimeType,
+		catalogProvider: provider,
+		componentRepo:   componentRepo,
+		paramBuilder:    params.NewParamBuilder(provider),
 	}
 }
 
@@ -111,14 +106,8 @@ func (p *DeploymentPlanner) PlanDeployment(
 	ctx context.Context,
 	req apimodels.CreateApplicationRequest,
 ) (*DeploymentPlan, error) {
-	runtimeType := p.runtimeType
-	if runtimeType == "" {
-		// TODO: Remove this fallback once all callers provide a runtime-scoped planner.
-		var err error
-		runtimeType, err = p.ResolveRuntimeType(ctx, req.WorkerName)
-		if err != nil {
-			return nil, err
-		}
+	if p.runtimeType == "" {
+		return nil, fmt.Errorf("planner has no runtime type: call WithRuntime before PlanDeployment")
 	}
 
 	workerName := req.WorkerName
@@ -132,16 +121,18 @@ func (p *DeploymentPlanner) PlanDeployment(
 	}
 
 	// Create deployment plan
+	appID := uuid.New()
 	plan := &DeploymentPlan{
-		ApplicationID:   uuid.New(),
+		ApplicationID:   appID,
 		ApplicationName: req.Name,
+		Namespace:       utils.AppNamespace(appID),
 		CatalogID:       req.CatalogID,
 		Version:         req.Version,
 		IsArchitecture:  isArchitecture,
 		Components:      make(map[string]*ComponentPlan),
 		Services:        make(map[string]*ServicePlan),
 		WorkerName:      workerName,
-		RuntimeType:     runtimeType,
+		RuntimeType:     p.runtimeType,
 	}
 
 	// Process each service from request
@@ -151,10 +142,12 @@ func (p *DeploymentPlanner) PlanDeployment(
 		}
 	}
 
-	// Calculate and allocate Spyre cards only for local Podman deployments.
-	// Remote-worker deployments must not probe local /dev/vfio on the API server.
-	if runtimeType == runtimeTypes.RuntimeTypePodman.String() && isLocalWorkerName(workerName) {
-		if err := p.calculateAndAllocateSpyreCards(ctx, plan); err != nil {
+	// Calculate and allocate Spyre cards for all Podman deployments.
+	// The FIND_FREE_SPYRE_CARDS command is always sent over gRPC to the worker pod —
+	// even for the local worker — so the API server never probes /dev/vfio directly.
+	// plan.RuntimeType is the worker's effective runtime resolved before PlanDeployment.
+	if plan.RuntimeType == runtimeTypes.RuntimeTypePodman.String() {
+		if err := p.calculateAndAllocateSpyreCards(ctx, plan, workerName); err != nil {
 			return nil, fmt.Errorf("failed to allocate Spyre cards: %w", err)
 		}
 	}
@@ -264,7 +257,8 @@ func (p *DeploymentPlanner) processComponent(
 }
 
 // calculateAndAllocateSpyreCards calculates required Spyre cards and creates allocation pool.
-func (p *DeploymentPlanner) calculateAndAllocateSpyreCards(ctx context.Context, plan *DeploymentPlan) error {
+// workerName is used to determine whether to probe locally or over gRPC to a remote worker.
+func (p *DeploymentPlanner) calculateAndAllocateSpyreCards(ctx context.Context, plan *DeploymentPlan, workerName string) error {
 	totalRequired := 0
 
 	// Calculate total required Spyre cards from all components
@@ -287,8 +281,8 @@ func (p *DeploymentPlanner) calculateAndAllocateSpyreCards(ctx context.Context, 
 
 	logger.InfofCtx(ctx, "Total Spyre cards required: %d\n", totalRequired)
 
-	// Find available Spyre cards
-	pciAddresses, err := helpers.FindFreeSpyreCards(ctx)
+	// Find available Spyre cards via the worker pod over gRPC.
+	pciAddresses, err := p.findFreeSpyreCards(ctx, workerName)
 	if err != nil {
 		return fmt.Errorf("failed to find free Spyre cards: %w", err)
 	}
@@ -307,6 +301,23 @@ func (p *DeploymentPlanner) calculateAndAllocateSpyreCards(ctx context.Context, 
 	}
 
 	return nil
+}
+
+// findFreeSpyreCards sends FIND_FREE_SPYRE_CARDS over the gRPC stream to the
+// named worker pod (local or remote) so the worker host probes /dev/vfio —
+// the API server never touches hardware directly.
+func (p *DeploymentPlanner) findFreeSpyreCards(ctx context.Context, workerName string) ([]string, error) {
+	rt, err := runtime.NewRuntimeFactory(runtimeTypes.RuntimeType(p.runtimeType)).CreateRemote(workerName, p.workerRegistry, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create remote runtime for worker %q: %w", workerName, err)
+	}
+
+	remoteRT, ok := rt.(*remoteruntime.RemoteRuntime)
+	if !ok {
+		return nil, fmt.Errorf("unexpected runtime type for worker %q", workerName)
+	}
+
+	return remoteRT.FindFreeSpyreCards(ctx)
 }
 
 // getRequiredSpyreCardsForComponent calculates Spyre cards needed for a component.
@@ -342,21 +353,12 @@ func (p *DeploymentPlanner) WorkerDBID(workerName string) (uuid.UUID, bool) {
 	return p.workerRegistry.WorkerID(workerName)
 }
 
-// ValidateWorker confirms the named remote worker is connected. Called from
+// ValidateWorker confirms the named worker is connected. Called from
 // PlanDeployment before any DB records are written so the Create API can
 // return an error immediately on failure.
 func (p *DeploymentPlanner) ValidateWorker(ctx context.Context, workerName string) error {
-	if isLocalWorkerName(workerName) {
-		return nil
-	}
-
 	if p.workerRegistry == nil {
-		return fmt.Errorf("worker deployment is not configured on this server")
-	}
-
-	// TODO: Remove this when remote deployment is by default
-	if workerName == "" {
-		return nil
+		return fmt.Errorf("worker registry is not configured on this server")
 	}
 
 	if !p.workerRegistry.IsWorkerConnected(ctx, workerName) {
@@ -366,13 +368,10 @@ func (p *DeploymentPlanner) ValidateWorker(ctx context.Context, workerName strin
 	return nil
 }
 
-// ResolveRuntimeType returns the effective runtime for a create-application
-// request: worker runtime when workerName is set, otherwise server runtime.
+// ResolveRuntimeType returns the worker's registered runtime type for a
+// create-application request. Always queries the worker registry so both
+// local and remote workers are treated uniformly.
 func (p *DeploymentPlanner) ResolveRuntimeType(ctx context.Context, workerName string) (string, error) {
-	if isLocalWorkerName(workerName) {
-		return p.serverRuntimeType, nil
-	}
-
 	if err := p.ValidateWorker(ctx, workerName); err != nil {
 		return "", err
 	}
@@ -386,10 +385,6 @@ func (p *DeploymentPlanner) ResolveRuntimeType(ctx context.Context, workerName s
 	}
 
 	return workerRT, nil
-}
-
-func isLocalWorkerName(workerName string) bool {
-	return strings.EqualFold(workerName, workerconstants.LocalWorkerName)
 }
 
 // Made with Bob

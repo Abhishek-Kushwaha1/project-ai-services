@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -19,6 +20,13 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/worker/registry"
 )
 
+const (
+	// workerNameMinLen is the minimum allowed length for a worker name after trimming whitespace.
+	workerNameMinLen = 3
+	// workerNameMaxLen is the maximum allowed length for a worker name after trimming whitespace.
+	workerNameMaxLen = 64
+)
+
 // WorkerHandler handles worker management endpoints.
 type WorkerHandler struct {
 	reg         *registry.Registry
@@ -34,7 +42,7 @@ func NewWorkerHandler(reg *registry.Registry, repo repository.WorkerRepository, 
 
 // createWorkerReq is the request body for registering a new worker.
 type createWorkerReq struct {
-	WorkerName string `json:"worker_name" binding:"required,min=1,max=100"`
+	WorkerName string `json:"worker_name" binding:"required"`
 }
 
 // createWorkerResp is the response body for a newly registered worker.
@@ -55,6 +63,7 @@ type createWorkerResp struct {
 //	@Param			worker	body		createWorkerReq			true	"Worker registration request"
 //	@Success		201		{object}	createWorkerResp		"Worker registered; token valid for 24 hours"
 //	@Failure		400		{object}	map[string]interface{}	"Invalid payload"
+//	@Failure		409		{object}	map[string]interface{}	"Worker is already registered and ready"
 //	@Failure		500		{object}	map[string]interface{}	"Internal error"
 //	@Security		BearerAuth
 //	@Router			/workers [post]
@@ -66,11 +75,13 @@ func (h *WorkerHandler) CreateWorker(c *gin.Context) {
 		return
 	}
 
-	// Normalise: trim surrounding whitespace and lowercase so that
-	// "Worker-A", "worker-a", and " worker-a " all resolve to the same name.
-	req.WorkerName = strings.ToLower(strings.TrimSpace(req.WorkerName))
-	if req.WorkerName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "worker_name must not be blank"})
+	// Normalise: trim surrounding whitespace only. Case is preserved so that
+	// the DB row and in-memory entry reflect the name as the operator gave it.
+	// All lookups use case-insensitive comparison so "Worker-A" and "worker-a"
+	// resolve to the same entry regardless of how it was registered.
+	req.WorkerName = strings.TrimSpace(req.WorkerName)
+	if len(req.WorkerName) < workerNameMinLen || len(req.WorkerName) > workerNameMaxLen {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "worker name must be between 3 and 64 characters"})
 
 		return
 	}
@@ -78,7 +89,8 @@ func (h *WorkerHandler) CreateWorker(c *gin.Context) {
 	// "Local" is reserved for the catalog-machine worker registered by the
 	// configure flow. It is only allowed when LOCAL_WORKER=true, meaning this
 	// catalog instance is configured to host a co-located worker.
-	// Preserve the canonical casing so the DB row matches LocalWorkerName exactly.
+	// Normalise to the canonical casing so the DB row and token store always
+	// use "Local" regardless of how the operator typed it.
 	if strings.EqualFold(req.WorkerName, workerconstants.LocalWorkerName) {
 		if utils.GetEnv(workerconstants.LocalWorkerEnvVar, "") != "true" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("worker name %q is reserved", req.WorkerName)})
@@ -101,6 +113,11 @@ func (h *WorkerHandler) CreateWorker(c *gin.Context) {
 
 	token, err := h.reg.Preregister(ctx, req.WorkerName)
 	if err != nil {
+		if errors.Is(err, registry.ErrWorkerAlreadyReady) {
+			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("worker %q is already registered and ready", req.WorkerName)})
+
+			return
+		}
 		logger.ErrorfCtx(ctx, "worker handler: failed to register worker %q: %v", req.WorkerName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to register worker"})
 
@@ -230,6 +247,7 @@ func (h *WorkerHandler) GetWorker(c *gin.Context) {
 //	@Failure		400	{object}	map[string]interface{}	"Invalid worker ID"
 //	@Failure		403	{object}	map[string]interface{}	"Local worker cannot be deleted"
 //	@Failure		404	{object}	map[string]interface{}	"Worker not found"
+//	@Failure		409	{object}	map[string]interface{}	"Worker still has applications deployed on it"
 //	@Failure		500	{object}	map[string]interface{}	"Internal error"
 //	@Security		BearerAuth
 //	@Router			/workers/{id} [delete]
@@ -266,6 +284,14 @@ func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
 
 	deleted, err := h.reg.Deregister(ctx, workerID)
 	if err != nil {
+		if errors.Is(err, registry.ErrWorkerHasApplications) {
+			c.JSON(http.StatusConflict, gin.H{
+				"error": fmt.Sprintf("worker %q cannot be deleted while it has applications deployed on it", w.Name),
+			})
+
+			return
+		}
+
 		logger.ErrorfCtx(ctx, "worker handler: failed to deregister worker %s: %v", workerID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete worker"})
 

@@ -41,8 +41,8 @@ import (
 	bundlesvc "github.com/project-ai-services/ai-services/internal/pkg/catalog/apiserver/services/bundle"
 	dbrepo "github.com/project-ai-services/ai-services/internal/pkg/catalog/db/repository"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
-	"github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 	"github.com/project-ai-services/ai-services/internal/pkg/vars"
+	workerConstants "github.com/project-ai-services/ai-services/internal/pkg/worker/constants"
 	"github.com/project-ai-services/ai-services/internal/pkg/worker/gateway"
 	"github.com/project-ai-services/ai-services/internal/pkg/worker/registry"
 )
@@ -60,7 +60,7 @@ type APIServerOptions struct {
 	CatalogProvider    *catalog.CatalogProvider
 
 	// WorkerGatewayPort is the port the gRPC worker gateway listens on.
-	// Defaults to 9090 when zero.
+	// Defaults to 9191 when zero.
 	WorkerGatewayPort int
 	// WorkerRegistry holds the in-memory state of all connected workers and owns
 	// the bootstrap token store.
@@ -92,7 +92,7 @@ func NewAPIserver(options APIServerOptions) *APIserver {
 		options.Port = 8080
 	}
 	if options.WorkerGatewayPort == 0 {
-		options.WorkerGatewayPort = 9090
+		options.WorkerGatewayPort = workerConstants.WorkerGatewayPort
 	}
 
 	return &APIserver{
@@ -120,11 +120,11 @@ func (a *APIserver) Start(ctx context.Context) error {
 	defer cancel(nil)
 
 	// Start the gRPC worker gateway.
-	runtimeType := types.RuntimeTypePodman
-	if vars.RuntimeFactory != nil {
-		runtimeType = vars.RuntimeFactory.GetRuntimeType()
+	if vars.RuntimeFactory == nil {
+		return fmt.Errorf("runtime factory not initialised: --runtime flag is required")
 	}
-	gw, err := gateway.New(ctx, a.workerRegistry, runtimeType)
+
+	gw, err := gateway.New(ctx, a.workerRegistry, vars.RuntimeFactory.GetRuntimeType())
 	if err != nil {
 		return fmt.Errorf("failed to initialise worker gateway: %w", err)
 	}

@@ -1,25 +1,36 @@
-// Job status constants (matching backend enum values)
+// Job status constants.
+// Wire values (from backend JobStatus enum) plus UI-only display labels derived
+// from job.status + job.operation in getJobStatus().
 export const JOB_STATUS = {
+  // --- wire values ---
   ACCEPTED: 'accepted',
   IN_PROGRESS: 'in_progress',
   COMPLETED: 'completed',
+  COMPLETED_WITH_ERRORS: 'completed_with_errors',
   FAILED: 'failed',
+  CANCEL_PENDING: 'cancel_pending',
+  CANCELLED: 'cancelled',
+  INGESTED: 'ingested',
+  DIGITIZED: 'digitized',
+  INGESTION_ERROR: 'ingestion error',
+  DIGITIZATION_ERROR: 'digitization error',
+  INGESTING: 'ingesting...',
+  DIGITIZING: 'digitizing...',
+  CANCELLING: 'cancelling...',
 } as const;
 
-// Display status constants
-export const DISPLAY_STATUS = {
-  ACCEPTED: 'Accepted',
-  INGESTED: 'Ingested',
-  DIGITIZED: 'Digitized',
-  INGESTION_ERROR: 'Ingestion error',
-  DIGITIZATION_ERROR: 'Digitization error',
-  INGESTING: 'Ingesting...',
-  DIGITIZING: 'Digitizing...',
-} as const;
-
-// Document status constants (matching backend DocStatus enum values)
+// Document status constants — mirrors backend DocStatus enum wire values
 export const DOC_STATUS = {
+  ACCEPTED: 'accepted',
+  IN_PROGRESS: 'in_progress',
+  DIGITIZED: 'digitized',
+  PROCESSED: 'processed',
+  CHUNKED: 'chunked',
+  COMPLETED: 'completed',
+  COMPLETED_WITH_ERRORS: 'completed_with_errors',
+  FAILED: 'failed',
   ALREADY_EXISTS: 'already_exists',
+  CANCELLED: 'cancelled',
 } as const;
 
 // Job operation types

@@ -1,0 +1,114 @@
+@use "@carbon/react/scss/spacing" as *;
+@use "@carbon/react/scss/theme" as *;
+@use "@carbon/react/scss/type" as *;
+@use "@carbon/react/scss/breakpoint" as *;
+
+.summaryGrid {
+  margin-bottom: $spacing-05;
+  // Carbon's narrow grid adds left padding that offsets the tile from the
+  // upload card below. Remove it so both cards share the same left edge.
+  padding-left: 0 !important;
+}
+
+.summaryTile {
+  border: 1px solid $border-subtle;
+  border-radius: 0;
+  background-color: $layer;
+  min-height: 80px;
+}
+
+.summaryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $spacing-03;
+}
+
+.summaryLabel {
+  @include type-style("label-01");
+  color: $text-secondary;
+}
+
+.checkIcon {
+  fill: $support-success;
+  flex-shrink: 0;
+}
+
+.summaryValue {
+  display: flex;
+  align-items: center;
+  gap: $spacing-02;
+}
+
+.summaryCount {
+  @include type-style("heading-04");
+  color: $text-primary;
+}
+
+.summaryText {
+  @include type-style("body-long-01");
+  color: $text-primary;
+}
+
+.uploadCard {
+  background-color: $layer;
+  padding: $spacing-05;
+  margin-top: $spacing-05;
+}
+
+.uploadCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-05;
+}
+
+.uploadCardText {
+  flex: 1;
+}
+
+.uploadCardTitle {
+  @include type-style("body-short-02");
+  color: $text-primary;
+  margin-bottom: $spacing-02;
+}
+
+.uploadCardDescription {
+  @include type-style("body-short-01");
+  color: $text-secondary;
+  max-width: 48rem;
+}
+
+.toggle {
+  flex-shrink: 0;
+  // Remove Carbon's default top margin so the switch aligns to the top of
+  // the card header text.
+  margin-top: 0 !important;
+}
+
+.dropdownSection {
+  margin-top: $spacing-05;
+}
+
+.dropdownSkeleton {
+  // Match the Carbon dropdown field height (40px)
+  block-size: 2.5rem !important;
+  inline-size: 100% !important;
+  max-width: 40rem;
+}
+
+.dropdown {
+  max-width: 40rem;
+
+  // Override the Carbon layer-based background so the field renders on white.
+  :global(.cds--list-box) {
+    background-color: #ffffff;
+  }
+}
+
+.selectedTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-02;
+  margin-top: $spacing-03;
+}

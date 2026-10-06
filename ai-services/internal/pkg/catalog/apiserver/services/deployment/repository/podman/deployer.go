@@ -734,13 +734,16 @@ func (d *PodmanDeployer) deployPodTemplateLayer(
 	for _, podTemplateName := range layer {
 		initialParams := d.buildInitialParams(applicationID, svc.DatabaseID, values)
 
-		_, podName, routes, err := d.deployPodTemplate(ctx, podTemplateName, tmpls, initialParams)
+		podEndpoints, podName, routes, err := d.deployPodTemplate(ctx, podTemplateName, tmpls, initialParams)
 		if err != nil {
 			return fmt.Errorf("failed to deploy pod template %s: %w", podTemplateName, err)
 		}
 
 		if routes != "" {
 			svc.Routes[podName] = routes
+			if svc.InternalEndpoint == "" {
+				svc.InternalEndpoint = buildInternalEndpointURL(podEndpoints)
+			}
 		}
 	}
 
@@ -758,13 +761,16 @@ func (d *PodmanDeployer) deployAllPodTemplates(
 	for templateName := range tmpls {
 		initialParams := d.buildInitialParams(applicationID, svc.DatabaseID, values)
 
-		_, podName, routes, err := d.deployPodTemplate(ctx, templateName, tmpls, initialParams)
+		podEndpoints, podName, routes, err := d.deployPodTemplate(ctx, templateName, tmpls, initialParams)
 		if err != nil {
 			return fmt.Errorf("failed to deploy pod template %s: %w", templateName, err)
 		}
 
 		if routes != "" {
 			svc.Routes[podName] = routes
+			if svc.InternalEndpoint == "" {
+				svc.InternalEndpoint = buildInternalEndpointURL(podEndpoints)
+			}
 		}
 	}
 
@@ -1095,11 +1101,7 @@ func (d *PodmanDeployer) getEnvParamsForComponent(ctx context.Context, podSpec *
 	}
 
 	if plan.SpyreCardPool == nil {
-		pool, err := d.buildSpyreCardPoolForPlan(ctx, spyreCards)
-		if err != nil {
-			return env, err
-		}
-		plan.SpyreCardPool = pool
+		return env, fmt.Errorf("spyre cards required but pool was not populated during planning")
 	}
 
 	// Allocate PCI addresses to containers that need them
@@ -1124,49 +1126,13 @@ func (d *PodmanDeployer) getEnvParamsForComponent(ctx context.Context, podSpec *
 	return env, nil
 }
 
+// getBaseDir returns the base directory for deployment artifacts.
 func (d *PodmanDeployer) getBaseDir() string {
 	if d.baseDir != "" {
 		return d.baseDir
 	}
 
 	return utils.GetBaseDir()
-}
-
-func (d *PodmanDeployer) buildSpyreCardPoolForPlan(ctx context.Context, required int) (*SpyreCardPool, error) {
-	addresses, err := d.fetchFreeSpyreCards(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	sanitized := make([]string, 0, len(addresses))
-	for _, addr := range addresses {
-		if trimmed := strings.TrimSpace(addr); trimmed != "" {
-			sanitized = append(sanitized, trimmed)
-		}
-	}
-	if len(sanitized) < required {
-		return nil, fmt.Errorf("insufficient Spyre cards: required %d, available %d", required, len(sanitized))
-	}
-
-	return &SpyreCardPool{Addresses: sanitized}, nil
-}
-
-func (d *PodmanDeployer) fetchFreeSpyreCards(ctx context.Context) ([]string, error) {
-	if remoteRT, ok := d.runtime.(*remoteruntime.RemoteRuntime); ok {
-		addresses, err := remoteRT.FindFreeSpyreCards(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to find free Spyre cards on worker %q: %w", remoteRT.WorkerName(), err)
-		}
-
-		return addresses, nil
-	}
-
-	addresses, err := helpers.FindFreeSpyreCards(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find free Spyre cards: %w", err)
-	}
-
-	return addresses, nil
 }
 
 func (d *PodmanDeployer) fetchBaseDir(ctx context.Context) (string, error) {
@@ -1261,6 +1227,14 @@ func (d *PodmanDeployer) registerServiceRoutes(
 		}
 	}
 
+	// Also store the internal pod-to-pod endpoint
+	if svc.InternalEndpoint != "" {
+		serviceEndpoints = append(serviceEndpoints, map[string]any{
+			"type": "internal",
+			"url":  svc.InternalEndpoint,
+		})
+	}
+
 	// Update service endpoints in database
 	if len(serviceEndpoints) > 0 {
 		if err := d.serviceRepo.UpdateEndpoints(ctx, svc.DatabaseID, serviceEndpoints); err != nil {
@@ -1270,6 +1244,22 @@ func (d *PodmanDeployer) registerServiceRoutes(
 	}
 
 	return nil
+}
+
+// buildInternalEndpointURL constructs http://host:port from the map returned by extractPodEndpoints.
+// Returns an empty string when host is missing.
+func buildInternalEndpointURL(endpoints map[string]string) string {
+	host := endpoints["host"]
+	if host == "" {
+		return ""
+	}
+
+	port := endpoints["port"]
+	if port == "" {
+		return fmt.Sprintf("http://%s", host)
+	}
+
+	return fmt.Sprintf("http://%s:%s", host, port)
 }
 
 // updateComponentEndpointsInDB updates component endpoints in the database.

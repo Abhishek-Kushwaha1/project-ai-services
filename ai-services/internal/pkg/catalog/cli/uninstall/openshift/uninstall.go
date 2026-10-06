@@ -6,6 +6,7 @@ import (
 
 	clicommon "github.com/project-ai-services/ai-services/internal/pkg/catalog/cli/common"
 	utils "github.com/project-ai-services/ai-services/internal/pkg/catalog/cli/uninstall/utils"
+	"github.com/project-ai-services/ai-services/internal/pkg/catalog/config"
 	catalogConstants "github.com/project-ai-services/ai-services/internal/pkg/catalog/constants"
 	catalogutils "github.com/project-ai-services/ai-services/internal/pkg/catalog/utils"
 	internalutils "github.com/project-ai-services/ai-services/internal/pkg/cli/utils"
@@ -33,7 +34,7 @@ func UninstallCatalog(ctx context.Context, opts utils.UninstallOptions) error {
 	// Check before catalog pods are deleted whether a local worker is co-located.
 	isLocalWorker, err := workercommon.IsOpenShiftLocalWorker(ctx, rt)
 	if err != nil {
-		return fmt.Errorf("failed to check local worker: %w", err)
+		return fmt.Errorf("failed to check worker: %w", err)
 	}
 
 	// Confirm deletion unless auto-yes is set
@@ -56,6 +57,11 @@ func UninstallCatalog(ctx context.Context, opts utils.UninstallOptions) error {
 		}
 	}
 
+	// Remove local credentials
+	if err := config.Delete(); err != nil {
+		logger.WarningfCtx(ctx, "Failed to remove local catalog credentials: %v\n", err)
+	}
+
 	return nil
 }
 
@@ -72,12 +78,22 @@ func uninstallCatalogResources(ctx context.Context, rt runtime.Runtime, catalog,
 	}
 
 	if !skipCleanup {
+		appLabel := fmt.Sprintf("%s=%s", constants.ApplicationAnnotationKey, catalog)
+
 		logger.DebuglnCtx(ctx, "Delete catalog PVCs...")
 
-		if err := rt.DeletePVCs(ctx, fmt.Sprintf("%s=%s", constants.ApplicationAnnotationKey, catalog)); err != nil {
+		if err := rt.DeletePVCs(ctx, appLabel); err != nil {
 			s.Fail("failed to delete catalog pvc")
 
 			return fmt.Errorf("failed to delete PVCs: %w", err)
+		}
+
+		logger.DebuglnCtx(ctx, "Delete catalog secrets...")
+
+		if err := rt.DeleteSecrets(ctx, appLabel); err != nil {
+			s.Fail("failed to delete catalog secrets")
+
+			return fmt.Errorf("failed to delete secrets: %w", err)
 		}
 
 		if err := rt.DeleteNamespace(ctx, namespace); err != nil {

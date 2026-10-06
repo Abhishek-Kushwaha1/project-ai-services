@@ -87,6 +87,7 @@ export interface DeployOptionsService {
     storage?: number;
     accelerators?: Record<string, number>;
   };
+  accepts_datasource?: boolean;
 }
 
 export interface DeployOptionsResponse {
@@ -122,6 +123,12 @@ export interface ApplicationService {
   }>;
 }
 
+export interface ApplicationWorker {
+  id: string;
+  name: string;
+  runtime_type: string;
+}
+
 export interface Application {
   id: string;
   name: string;
@@ -132,6 +139,7 @@ export interface Application {
   created_at: string;
   updated_at: string;
   services: ApplicationService[];
+  worker?: ApplicationWorker;
 }
 
 export interface PaginationMetadata {
@@ -213,7 +221,6 @@ export interface DeploymentDetails {
   name: string;
   status: string;
   type: string;
-  resources: ResourceAllocation[];
   acceleratorCards?: AcceleratorCards[];
 }
 
@@ -223,10 +230,15 @@ export interface DeploymentServiceData {
   description: string;
   serviceVersion: string;
   largeLanguageModel?: string;
-  inferenceBackend: string;
+  inferenceBackend?: string;
   embeddingModel?: string;
   vectorStore?: string;
   rankerModel?: string;
+  customComponents?: Array<{
+    label: string;
+    model?: string;
+    providerName?: string;
+  }>;
 }
 
 export interface DeployIntegrationEndpoints {
@@ -234,7 +246,7 @@ export interface DeployIntegrationEndpoints {
   title: string;
   description: string;
   baseURL: string;
-  apiDocumentaion: string;
+  apiDocumentation: string;
   interactiveAPIs: string[];
 }
 
@@ -243,6 +255,7 @@ export interface ApplicationDetailsApiResponse {
   name: string;
   type: string;
   status: string;
+  worker?: ApplicationWorker;
   services: Array<{
     id: string;
     type: string;
@@ -305,6 +318,7 @@ export interface ServiceDeployOptions {
   name: string;
   description?: string;
   version: string;
+  schema?: string;
   components: DeployComponent[];
   resources?: {
     cpu: number;
@@ -312,6 +326,7 @@ export interface ServiceDeployOptions {
     storage?: number;
     accelerators?: Record<string, number>;
   };
+  accepts_datasource?: boolean;
 }
 
 export interface SchemaProperty {
@@ -367,13 +382,17 @@ export interface DeploymentComponent {
   params?: Record<string, unknown>;
 }
 
+export interface ConnectorRef {
+  id: string;
+  type: string;
+}
+
 export interface DeploymentService {
   catalog_id: string;
   version: string;
   components: DeploymentComponent[];
-  params?: {
-    backend?: Record<string, unknown>;
-  };
+  params?: Record<string, unknown>;
+  connectors?: ConnectorRef[];
 }
 
 export interface ArchitectureDeploymentPayload {
@@ -381,6 +400,7 @@ export interface ArchitectureDeploymentPayload {
   catalog_id: string;
   version: string;
   services: DeploymentService[];
+  worker_name?: string;
 }
 
 export interface ServiceDeploymentPayload {
@@ -390,6 +410,7 @@ export interface ServiceDeploymentPayload {
   deployment_type: "service";
   services: DeploymentService[];
   global_components?: Record<string, string>;
+  worker_name?: string;
 }
 
 export type DeploymentPayload =
@@ -397,6 +418,35 @@ export type DeploymentPayload =
   | ServiceDeploymentPayload;
 
 export type ConnectorStatus = "connected" | "offline";
+
+export type WorkerStatus = "pending" | "ready" | "disconnected";
+export type WorkerRuntimeType = "unknown" | "podman" | "openshift";
+
+export interface WorkerApiResponse {
+  id: string;
+  name: string;
+  status: WorkerStatus;
+  runtime_type: WorkerRuntimeType;
+  last_heartbeat?: string;
+  registered_at: string;
+  updated_at: string;
+  metadata?: Record<string, unknown>;
+  message?: string;
+  application_ids?: string[];
+}
+
+export interface WorkerListResponse {
+  data: WorkerApiResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface WorkerRegisterResponse {
+  worker_name: string;
+  gateway_address: string;
+  token: string;
+}
 
 export interface ConnectorProvider {
   id: string;
@@ -471,4 +521,84 @@ export interface CreateDatasourceRequest {
 /** POST /datasources — response body */
 export interface CreateDatasourceResponse {
   id: string;
+}
+
+// Sync-state status values produced by the Digitize service pod.
+// "unknown" is set by the Go catalog when the pod is unreachable.
+export type DatasourceSyncStatus =
+  | "up to date"
+  | "syncing"
+  | "out of sync"
+  | "delete pending"
+  | "unknown";
+
+// Matches backend ApplicationDatasourceItem (GET /applications/:id/datasources).
+export interface ApplicationDatasourceApiItem {
+  id: string;
+  name: string;
+  provider: {
+    id: string;
+    name: string;
+  };
+  status: DatasourceSyncStatus;
+  // Always a number — defaults to 0 before any sync has run, never null.
+  files: number;
+  // ISO-8601 timestamp of the last completed sync, or null when no sync has run yet.
+  last_sync: string | null;
+  // Status/phase message from the Digitize pod (omitempty — absent when empty).
+  message?: string;
+  // Populated when the catalog could not reach the Digitize pod (omitempty — absent on success).
+  err_msg?: string;
+}
+
+export interface ApplicationDatasourcesListResponse {
+  data: ApplicationDatasourceApiItem[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total_items: number;
+    total_pages: number;
+    has_next: boolean;
+    has_prev: boolean;
+  };
+}
+
+/** GET /datasources/:id — application entry inside a connector */
+export interface ConnectorApplication {
+  id: string;
+  name: string;
+  catalog_id: string;
+  type: string;
+  sync_status?: string | null;
+  last_sync_at?: string | null;
+}
+
+/** GET /datasources/:id — full detail response */
+export interface DataSourceDetailResponse {
+  id: string;
+  name: string;
+  type: string;
+  provider: ConnectorProvider;
+  status: ConnectorStatus;
+  message?: string;
+  metadata: Record<string, unknown>;
+  applications: ConnectorApplication[];
+  created_at: string;
+  updated_at: string;
+}
+
+/** PATCH /datasources/:id — update authentication key request */
+export interface UpdateDataSourceAuthRequest {
+  params: Record<string, string | string[]>;
+}
+
+// Matches backend ConnectDatasourcesResponse (PUT /applications/:id/datasources → 207).
+// Each entry describes one datasource that failed to connect.
+export interface ConnectDatasourceError {
+  datasource_id: string;
+  error: string;
+}
+
+export interface ConnectDatasourcesResponse {
+  errors: ConnectDatasourceError[];
 }

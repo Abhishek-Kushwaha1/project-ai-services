@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useCallback } from "react";
 import { formatVersion } from "@/utils/string";
 import { InlineNotification } from "@carbon/react";
 import styles from "../../Shared/DeployFlow.shared.module.scss";
@@ -14,11 +14,12 @@ import { useResources } from "../../Shared/hooks/useResources";
 import { getResourceSharingKey } from "../utils/resourceSharing";
 import { sumProviderResources } from "../../Shared/utils/resources";
 import { useDeployStore, type ServiceParamsCache } from "@/store/deploy.store";
+import { parseSchema, getFieldDefault } from "@/utils/schemaParser";
 import type {
   DeployOptionsResponse,
   DeployOptionsComponent as Component,
 } from "@/types/api.types";
-import { COMPONENT_TYPES } from "@/constants";
+import { COMPONENT_TYPES, DEFAULT_RUNTIME } from "@/constants";
 
 type InferenceOptions = {
   options: Array<{ id: string; text: string }>;
@@ -87,10 +88,15 @@ function buildInferenceOptions(
 }
 
 // StepProps narrowed so services carry the base ServiceConfig.
-type DAStepProps = Omit<StepProps, "formData"> & {
+// Worker props are only needed on step one (SharedStepOne), not here.
+type DAStepProps = Omit<
+  StepProps,
+  "formData" | "workers" | "isLoadingWorkers" | "refetchWorkers"
+> & {
   formData: Omit<DeployFormData, "services"> & {
     services: Record<string, ServiceConfig>;
   };
+  runtime?: string;
 };
 
 type DAFormData = DAStepProps["formData"];
@@ -212,6 +218,7 @@ export const DAStepTwo: React.FC<DAStepProps> = ({
   onEditingChange,
   onResourceStatusChange,
   onComponentError,
+  runtime = DEFAULT_RUNTIME,
 }) => {
   const { getServiceDescription } = useDeployStore();
   const serviceParamsError = useDeployStore(
@@ -224,24 +231,28 @@ export const DAStepTwo: React.FC<DAStepProps> = ({
 
   const failedServiceNames = useMemo(() => {
     return deployOptions.services
-      .filter((s) => !!serviceParamsError[s.id])
+      .filter((s) => !!serviceParamsError[`${runtime}:${s.id}`])
       .map((s) => s.name || s.id);
-  }, [deployOptions.services, serviceParamsError]);
+  }, [deployOptions.services, serviceParamsError, runtime]);
 
   // Check if any service-component provider schema failed to load (background pairs).
   const hasProviderParamsError = useMemo(() => {
     return deployOptions.services.some((s) =>
       s.components.some((c) =>
-        c.providers.some((p) => !!providerParamsError[`${c.type}:${p.id}`]),
+        c.providers.some(
+          (p) => !!providerParamsError[`${runtime}:${c.type}:${p.id}`],
+        ),
       ),
     );
-  }, [deployOptions.services, providerParamsError]);
+  }, [deployOptions.services, providerParamsError, runtime]);
 
   useEffect(() => {
     onComponentError?.(failedServiceNames.length > 0 || hasProviderParamsError);
   }, [failedServiceNames, hasProviderParamsError, onComponentError]);
 
-  const { resources, resourcesLoading, resourcesError } = useResources();
+  const { resources, resourcesLoading, resourcesError } = useResources(
+    formData.workerName,
+  );
   const calculatedResources = useMemo(
     () => calculateDARequiredResources(formData, deployOptions),
     [formData, deployOptions],
@@ -253,6 +264,56 @@ export const DAStepTwo: React.FC<DAStepProps> = ({
     ],
     [deployOptions.version],
   );
+
+  // Idempotently seed service-level params from schema defaults when schemas
+  // arrive asynchronously after form initialization. Only seeds fields that are
+  // not yet set — preserves any user edits already made.
+  const seedNoComponentServiceParams = useCallback(() => {
+    const serviceUpdates: Record<string, ServiceConfig> = {};
+
+    deployOptions.services.forEach((service) => {
+      const schemaCacheEntry = serviceParamsMap[`${runtime}:${service.id}`] as
+        | ServiceParamsCache
+        | undefined;
+      if (!schemaCacheEntry?.data) return;
+
+      const serviceConfig = formData.services[service.id];
+      if (!serviceConfig) return;
+
+      const fields = parseSchema(schemaCacheEntry.data);
+      const updates: Record<string, unknown> = {};
+
+      fields.forEach((field) => {
+        if (field.uiOnly) return;
+        // Only seed fields not yet set — preserves user edits
+        if (serviceConfig.params?.[field.key] !== undefined) return;
+        updates[field.key] = getFieldDefault(field);
+      });
+
+      if (Object.keys(updates).length > 0) {
+        serviceUpdates[service.id] = {
+          ...serviceConfig,
+          params: { ...serviceConfig.params, ...updates },
+        };
+      }
+    });
+
+    if (Object.keys(serviceUpdates).length > 0) {
+      onChange({
+        services: { ...formData.services, ...serviceUpdates },
+      });
+    }
+  }, [
+    deployOptions.services,
+    formData.services,
+    serviceParamsMap,
+    onChange,
+    runtime,
+  ]);
+
+  useEffect(() => {
+    seedNoComponentServiceParams();
+  }, [seedNoComponentServiceParams]);
 
   // Populate default model params once provider schemas are loaded.
   // Guarded by `if (config.params?.model) return` so this is idempotent —
@@ -414,8 +475,11 @@ export const DAStepTwo: React.FC<DAStepProps> = ({
         });
 
         const serviceSchema =
-          (serviceParamsMap[service.id] as ServiceParamsCache | undefined)
-            ?.data ?? null;
+          (
+            serviceParamsMap[`${runtime}:${service.id}`] as
+              | ServiceParamsCache
+              | undefined
+          )?.data ?? null;
 
         return [
           {
@@ -445,6 +509,7 @@ export const DAStepTwo: React.FC<DAStepProps> = ({
     deduplicatedLlmOptions,
     deduplicatedRerankerOptions,
     getServiceDescription,
+    runtime,
   ]);
 
   const handleServiceChange = (serviceId: string, updated: ServiceConfig) => {

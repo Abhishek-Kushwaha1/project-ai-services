@@ -56,6 +56,51 @@ export const STATUS_CONFIG = {
     icon: ErrorFilled,
     className: sharedStyles.statusTagError,
   },
+  // ── Worker statuses ──────────────────────────────────────────────────────────
+  ready: {
+    tagType: "green" as const,
+    icon: CheckmarkFilled,
+    className: sharedStyles.statusTagSuccess,
+  },
+  pending: {
+    tagType: "blue" as const,
+    icon: InProgress,
+    className: sharedStyles.statusTagInfo,
+  },
+  disconnected: {
+    tagType: "red" as const,
+    icon: ErrorFilled,
+    className: sharedStyles.statusTagError,
+  },
+  // ── Application datasource statuses ─────────────────────────────────────────
+  "up to date": {
+    tagType: "green" as const,
+    icon: CheckmarkFilled,
+    className: sharedStyles.statusTagSuccess,
+  },
+  "out of sync": {
+    tagType: "red" as const,
+    icon: ErrorFilled,
+    className: sharedStyles.statusTagError,
+  },
+  syncing: {
+    tagType: "blue" as const,
+    icon: InProgress,
+    className: sharedStyles.statusTagInfo,
+  },
+  // The backend API filters out "delete pending" rows before they reach the UI.
+  // Kept as a fallback.
+  "delete pending": {
+    tagType: "blue" as const,
+    icon: InProgress,
+    className: sharedStyles.statusTagInfo,
+  },
+  // Service pod was unreachable when the catalog last attempted to fetch sync state
+  unknown: {
+    tagType: "gray" as const,
+    icon: ErrorFilled,
+    className: sharedStyles.statusTagSecondary,
+  },
 } as const;
 
 const DEFAULT_STATUS_CONFIG = {
@@ -76,6 +121,12 @@ export interface ActionCellProps {
   onDelete: (rowId: string) => void;
   // Each table has its own delete eligibility rule and passes it explicitly.
   isDeleteEnabled: (status: string | undefined) => boolean;
+  /** Called when the overflow menu opens — use to prefetch data keyed by rowId */
+  onMenuOpen?: (rowId: string) => Promise<void>;
+  /** Called when the user clicks "View integration endpoints" — only enabled when Running */
+  onViewIntegration?: (rowId: string) => void;
+  /** Called when the user clicks "Launch service endpoint" — only enabled when Running */
+  onLaunchEndpoint?: (rowId: string) => void;
 }
 
 export interface NameCellProps {
@@ -110,20 +161,40 @@ export const StatusCell = ({ value }: SharedCellRendererProps) => {
   );
 };
 
-export const MessageCell = ({ value, rowData }: SharedCellRendererProps) => {
+export interface MessageCellProps extends SharedCellRendererProps {
+  /**
+   * Statuses that indicate a clean/healthy state — message is suppressed when
+   * the row's status is in this list (or when the message is empty).
+   * Defaults to ["Running", "connected", "up to date"] — covers the deployments table
+   * (Running) and the connectors table (connected) and the application datasources table (up to date).
+   */
+  hideStatuses?: string[];
+  /**
+   * Statuses that warrant the error icon instead of the in-progress icon.
+   * Defaults to ["Error", "offline"] to preserve existing behaviour for the deployments table.
+   */
+  errorStatuses?: string[];
+}
+
+export const MessageCell = ({
+  value,
+  rowData,
+  hideStatuses = ["Running", "connected", "up to date"],
+  errorStatuses = ["Error", "offline", "out of sync"],
+}: MessageCellProps) => {
   const message = String(value || "");
   const status = rowData?.status || "";
 
-  // Hide message if status is Running, connected or if message is empty
-  if (status === "Running" || status === "connected" || !message) {
+  // Hide message when the row is in a clean/healthy state or there is no message
+  if (hideStatuses.includes(status) || !message) {
     return <span></span>;
   }
 
   let MessageIcon;
   let iconClassName: string;
 
-  // Error and offline both indicate a hard failure — use the error icon
-  if (status === "Error" || status === "offline") {
+  // Hard-failure statuses get the error icon; everything else gets the in-progress icon
+  if (errorStatuses.includes(status)) {
     MessageIcon = ErrorFilled;
     iconClassName = sharedStyles.messageIconError;
   } else {
@@ -144,11 +215,42 @@ export const ActionCell = ({
   rowData,
   onDelete,
   isDeleteEnabled,
+  onMenuOpen,
+  onViewIntegration,
+  onLaunchEndpoint,
 }: ActionCellProps) => {
+  const [isPrefetching, setIsPrefetching] = React.useState(false);
   const deleteEnabled = isDeleteEnabled(rowData?.status);
+  const isRunning = rowData?.status === "Running";
+
+  const handleOpen = React.useCallback(async () => {
+    if (!onMenuOpen) return;
+    setIsPrefetching(true);
+    await onMenuOpen(rowId);
+    setIsPrefetching(false);
+  }, [onMenuOpen, rowId]);
 
   return (
-    <OverflowMenu size="lg" flipped aria-label="Actions">
+    <OverflowMenu
+      size="lg"
+      flipped
+      aria-label="Actions"
+      onOpen={onMenuOpen ? handleOpen : undefined}
+    >
+      {onViewIntegration ? (
+        <OverflowMenuItem
+          itemText="View integration endpoints"
+          disabled={!isRunning}
+          onClick={() => onViewIntegration(rowId)}
+        />
+      ) : null}
+      {onLaunchEndpoint ? (
+        <OverflowMenuItem
+          itemText="Launch service endpoint"
+          disabled={!isRunning || isPrefetching}
+          onClick={() => onLaunchEndpoint(rowId)}
+        />
+      ) : null}
       <OverflowMenuItem
         itemText={
           <div className={sharedStyles.deleteMenuItem}>

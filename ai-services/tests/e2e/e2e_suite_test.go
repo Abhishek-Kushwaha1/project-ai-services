@@ -1957,7 +1957,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			gomega.Expect(doc.Name).To(gomega.Equal("blank.pdf"))
 			logger.Infof("[TEST] ✓ Blank PDF ingestion completed successfully")
 		})
-		// ΓöÇΓöÇ Export API ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+		// ── Export API ──────────────────────────────────────────────────────────
 
 		ginkgo.It("should export all jobs and documents via /v1/export", func() {
 			ctx, cancel := withTimeout(12 * time.Minute)
@@ -2457,7 +2457,7 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			resp, err := summarization.SummarizeTextWithLength(ctx, syncSummarizeBaseURL, text, 20)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(resp.Summary()).NotTo(gomega.BeEmpty())
-			// Allow ┬▒75% tolerance around the requested length (server does approximate word-count).
+			// Allow ±75% tolerance around the requested length (server does approximate word-count).
 			gomega.Expect(resp.Data.SummaryLength).To(gomega.BeNumerically(">=", 5))
 			gomega.Expect(resp.Data.SummaryLength).To(gomega.BeNumerically("<=", 35))
 			logger.Infof("[TEST] ✓ legacy length=20, actual summary_length=%d", resp.Data.SummaryLength)

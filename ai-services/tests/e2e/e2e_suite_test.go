@@ -834,6 +834,8 @@ var _ = ginkgo.Describe("AI Services End-to-End Tests", ginkgo.Ordered, func() {
 			if !podmanReady {
 				ginkgo.Skip("Podman not available - will be installed via bootstrap configure")
 			}
+			// VerifyContainers polls until all expected pods appear (up to 10 min), so passing
+			// the cached snapshot is fine — it will re-fetch internally if any pod is missing.
 			err := podman.VerifyContainers(ctx, cfg, appPsWideOutput, appName, appRuntime, templateName)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred(), "verify containers failed")
 			logger.Infof("[TEST] Containers verified")

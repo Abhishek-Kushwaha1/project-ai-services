@@ -19,6 +19,7 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/types"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/utils"
+	"github.com/project-ai-services/ai-services/internal/pkg/vars"
 	"github.com/project-ai-services/ai-services/tests/e2e/bootstrap"
 	"github.com/project-ai-services/ai-services/tests/e2e/common"
 	"github.com/project-ai-services/ai-services/tests/e2e/config"
@@ -864,11 +865,38 @@ func ModelList(ctx context.Context, cfg *config.Config, templateName string, app
 	return runCLIIsolated(ctx, cfg, "application model list", "application", "model", "list", "--template", templateName, "--runtime", appRuntime)
 }
 
+// ensureToolImage makes sure the tool image used by 'model download' is present locally.
+// The image pull spec may be skipped, so nothing else guarantees the image exists on the host.
+func ensureToolImage() error {
+	if _, err := common.RunCommand("podman", "image", "exists", vars.ToolImage); err == nil {
+		return nil
+	}
+
+	url, uname, pswd := bootstrap.GetPodManCreds()
+	if err := bootstrap.PodmanRegistryLogin(url, uname, pswd); err != nil {
+		return fmt.Errorf("tool image pull failed due to podman login err: %w", err)
+	}
+
+	logger.Infof("[CLI] Tool image %s not found locally, pulling", vars.ToolImage)
+
+	if out, err := common.RunCommand("podman", "pull", vars.ToolImage); err != nil {
+		return fmt.Errorf("failed to pull tool image %s: %w\n%s", vars.ToolImage, err, out)
+	}
+
+	return nil
+}
+
 // ModelDownload downloads models for a given application template.
 // Runs with an isolated config home to avoid stale catalog credentials.
 func ModelDownload(ctx context.Context, cfg *config.Config, templateName string, appRuntime string) (string, error) {
 	if err := common.EnsureDir(utils.GetModelsPath()); err != nil {
 		return "", err
+	}
+
+	if appRuntime == "podman" {
+		if err := ensureToolImage(); err != nil {
+			return "", err
+		}
 	}
 
 	return runCLIIsolated(ctx, cfg, "application model download", "application", "model", "download", "--template", templateName, "--runtime", appRuntime)

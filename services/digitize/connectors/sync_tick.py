@@ -477,10 +477,14 @@ async def _process_new_files(
 
 async def _delete_orphans(connector_id: str, orphan_checksums: set[str]) -> None:
     """Remove orphaned checksum rows and delete documents that lose their last owner."""
-    from digitize.api.v1.connectors import _remove_checksums
+    from digitize.utils.connectors import cleanup_connector_documents as _cleanup_connector_documents
 
-    checksum_removal_failures, doc_deletion_failures = await asyncio.to_thread(
-        _remove_checksums, connector_id, orphan_checksums
+    (
+        checksum_removal_failures,
+        doc_deletion_failures,
+        unregistered_doc_failures,
+    ) = await asyncio.to_thread(
+        _cleanup_connector_documents, connector_id, orphan_checksums
     )
     if checksum_removal_failures:
         raise RuntimeError(
@@ -489,6 +493,10 @@ async def _delete_orphans(connector_id: str, orphan_checksums: set[str]) -> None
     if doc_deletion_failures:
         raise RuntimeError(
             f"document deletion failed for {len(doc_deletion_failures)} checksum(s)"
+        )
+    if unregistered_doc_failures:
+        raise RuntimeError(
+            f"unregistered document deletion failed for {len(unregistered_doc_failures)} document(s)"
         )
 
 
@@ -502,35 +510,26 @@ async def _handle_interrupt(
     interrupt_type: Optional[InterruptType],
 ) -> None:
     """
-    Handle cancellation based on interrupt type.
+    Handle a cancelled tick (sync cancel and connector delete are handled alike).
 
-    SYNC_CANCEL: Stop the current sync, set connector to OUT_OF_SYNC, cleanup staging.
-    DELETE_CONNECTOR: Stop sync + full teardown (remove checksums, docs, connector row).
+    Closes the sync log as cancelled and cleans up this sync's staging
+    directory. For a connector being deleted (DELETE_PENDING) the connector row
+    is left untouched — ``update_connector_after_sync`` skips DELETE_PENDING
+    rows — and ``_run_teardown`` owns the remaining cleanup. Otherwise the
+    connector goes to OUT_OF_SYNC.
     """
-    if interrupt_type is None:
-        # Default cancel behavior — treat as sync cancel
-        _cancel_tick(sync_seq, connector_id)
-        return
+    logger.info(
+        f"Handling interrupt (type={interrupt_type}) for connector {connector_id!r}"
+    )
+    _cancel_tick(sync_seq, connector_id)
 
-    if interrupt_type == InterruptType.SYNC_CANCEL:
-        logger.info(f"Handling sync cancel for connector {connector_id!r}")
-        _cancel_tick(sync_seq, connector_id)
-        # Note: finalize_sync_log_and_update_connector() automatically sets connector to OUT_OF_SYNC when
-        # sync log status is CANCELLED. Cleanup staging directory for this sync.
-        from digitize.api.v1.connectors import _sweep_staging_dir
-        from digitize.settings import settings
-        _sweep_staging_dir(
-            connector_id,
-            settings.digitize.staging_dir / "connectors",
-            sync_seq=sync_seq,
-        )
-
-    elif interrupt_type == InterruptType.DELETE_CONNECTOR:
-        logger.info(f"Handling delete connector for {connector_id!r}")
-        _cancel_tick(sync_seq, connector_id)
-        # Run full teardown: remove checksums, delete orphaned docs, delete connector row
-        from digitize.api.v1.connectors import _run_teardown
-        await _run_teardown(connector_id)
+    from digitize.utils.connectors import sweep_staging_dir as _sweep_staging_dir
+    from digitize.settings import settings
+    _sweep_staging_dir(
+        connector_id,
+        settings.digitize.staging_dir / "connectors",
+        sync_seq=sync_seq,
+    )
 
 
 # ---------------------------------------------------------------------------
